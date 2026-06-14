@@ -80,7 +80,9 @@ export default function Home() {
     loadMovements()
 
     const savedParticipantId = localStorage.getItem('quiniela_participant_id')
-    const savedParticipantName = localStorage.getItem('quiniela_participant_name')
+    const savedParticipantName = localStorage.getItem(
+      'quiniela_participant_name'
+    )
     const savedParticipantPin = localStorage.getItem('quiniela_participant_pin')
 
     if (savedParticipantId && savedParticipantName && savedParticipantPin) {
@@ -420,6 +422,7 @@ export default function Home() {
   function renderLoginBox() {
     return (
       <div
+        className="login-box"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -562,6 +565,7 @@ export default function Home() {
         <h3 style={{ marginBottom: '15px' }}>🛠️ Admin: Agregar Partido</h3>
 
         <div
+          className="admin-add-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
@@ -650,6 +654,7 @@ export default function Home() {
     return (
       <div
         key={match.id}
+        className="match-card"
         style={{
           border: '2px solid #e5e5e5',
           borderRadius: '14px',
@@ -671,6 +676,7 @@ export default function Home() {
         </div>
 
         <div
+          className="match-score-row"
           style={{
             display: 'grid',
             gridTemplateColumns: '180px 80px',
@@ -708,6 +714,7 @@ export default function Home() {
         </div>
 
         <div
+          className="match-score-row"
           style={{
             display: 'grid',
             gridTemplateColumns: '180px 80px',
@@ -816,6 +823,7 @@ export default function Home() {
             <strong>🛠️ Admin: Resultado Final</strong>
 
             <div
+              className="admin-result-row"
               style={{
                 display: 'grid',
                 gridTemplateColumns: '180px 80px',
@@ -941,6 +949,7 @@ export default function Home() {
 
   return (
     <main
+      className="app-main"
       style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg,#006847 0%,#004d36 100%)',
@@ -950,12 +959,14 @@ export default function Home() {
       }}
     >
       <div
+        className="app-container"
         style={{
           maxWidth: '1600px',
           margin: '0 auto'
         }}
       >
         <div
+          className="top-login-bar"
           style={{
             display: 'flex',
             justifyContent: 'flex-end',
@@ -966,6 +977,7 @@ export default function Home() {
         </div>
 
         <h1
+          className="main-title"
           style={{
             textAlign: 'center',
             fontSize: '3rem',
@@ -976,6 +988,7 @@ export default function Home() {
         </h1>
 
         <p
+          className="main-subtitle"
           style={{
             textAlign: 'center',
             opacity: 0.9,
@@ -986,6 +999,7 @@ export default function Home() {
         </p>
 
         <div
+          className="dashboard-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
@@ -994,6 +1008,7 @@ export default function Home() {
           }}
         >
           <section
+            className="dashboard-panel"
             style={{
               background: 'white',
               color: '#222',
@@ -1058,6 +1073,7 @@ export default function Home() {
           </section>
 
           <section
+            className="dashboard-panel"
             style={{
               background: 'white',
               color: '#222',
@@ -1097,6 +1113,7 @@ export default function Home() {
                 return (
                   <div
                     key={entry.id}
+                    className="leaderboard-row"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '60px 1fr 90px',
@@ -1134,6 +1151,7 @@ export default function Home() {
         </div>
 
         <section
+          className="movement-section"
           style={{
             marginTop: '25px',
             background: 'white',
@@ -1153,6 +1171,7 @@ export default function Home() {
           </p>
 
           <div
+            className="movement-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',

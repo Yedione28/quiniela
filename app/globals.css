@@ -7,3 +7,101 @@
 body {
   background: #006847;
 }
+
+@media (max-width: 900px) {
+  .app-main {
+    padding: 16px !important;
+  }
+
+  .app-container {
+    max-width: 100% !important;
+  }
+
+  .top-login-bar {
+    justify-content: center !important;
+    margin-bottom: 18px !important;
+  }
+
+  .login-box {
+    justify-content: center !important;
+    width: 100% !important;
+  }
+
+  .login-box select,
+  .login-box input,
+  .login-box button {
+    max-width: 100% !important;
+  }
+
+  .main-title {
+    font-size: 2rem !important;
+    line-height: 1.15 !important;
+  }
+
+  .main-subtitle {
+    margin-bottom: 24px !important;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+  }
+
+  .dashboard-panel {
+    max-height: none !important;
+    position: static !important;
+    padding: 18px !important;
+  }
+
+  .match-score-row {
+    grid-template-columns: minmax(0, 1fr) 70px !important;
+    max-width: 100% !important;
+  }
+
+  .admin-add-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-result-row {
+    grid-template-columns: minmax(0, 1fr) 70px !important;
+    max-width: 100% !important;
+  }
+
+  .movement-section {
+    max-width: 100% !important;
+    padding: 18px !important;
+  }
+
+  .movement-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-main {
+    padding: 12px !important;
+  }
+
+  .main-title {
+    font-size: 1.65rem !important;
+  }
+
+  .dashboard-panel {
+    padding: 15px !important;
+    border-radius: 16px !important;
+  }
+
+  .match-card {
+    padding: 14px !important;
+  }
+
+  .leaderboard-row {
+    grid-template-columns: 45px 1fr 70px !important;
+    gap: 8px !important;
+  }
+
+  .movement-section {
+    padding: 15px !important;
+    border-radius: 16px !important;
+  }
+}
