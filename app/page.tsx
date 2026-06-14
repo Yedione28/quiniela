@@ -50,6 +50,8 @@ type MatchGroup = {
   matches: Match[]
 }
 
+const APP_TIME_ZONE = 'America/Mexico_City'
+
 export default function Home() {
   const [matches, setMatches] = useState<Match[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -147,9 +149,16 @@ export default function Home() {
     matchesToGroup.forEach((match) => {
       const date = new Date(match.kickoff)
 
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: APP_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(date)
+
+      const year = parts.find((part) => part.type === 'year')?.value
+      const month = parts.find((part) => part.type === 'month')?.value
+      const day = parts.find((part) => part.type === 'day')?.value
 
       const dateKey = `${year}-${month}-${day}`
 
@@ -163,12 +172,12 @@ export default function Home() {
     return Object.keys(groups)
       .sort()
       .map((dateKey) => {
-        const [year, month, day] = dateKey.split('-').map(Number)
-        const date = new Date(year, month - 1, day)
+        const firstMatchDate = new Date(groups[dateKey][0].kickoff)
 
         return {
           dateKey,
-          dateLabel: date.toLocaleDateString('es-MX', {
+          dateLabel: firstMatchDate.toLocaleDateString('es-MX', {
+            timeZone: APP_TIME_ZONE,
             weekday: 'long',
             day: 'numeric',
             month: 'long'
@@ -177,6 +186,7 @@ export default function Home() {
         }
       })
   }
+
   async function loginWithPin() {
     if (selectedLoginName === '' || loginPinInput.trim() === '') {
       alert('Selecciona tu nombre e ingresa tu PIN')
@@ -357,7 +367,7 @@ export default function Home() {
       return
     }
 
-    const kickoffDate = new Date(newMatchKickoff)
+    const kickoffDate = new Date(`${newMatchKickoff}:00-06:00`)
 
     if (Number.isNaN(kickoffDate.getTime())) {
       alert('La fecha/hora no es válida')
@@ -848,6 +858,7 @@ export default function Home() {
     const date = new Date(kickoff)
 
     const datePart = date.toLocaleDateString('es-MX', {
+      timeZone: APP_TIME_ZONE,
       weekday: 'short',
       day: 'numeric',
       month: 'short'
@@ -855,6 +866,7 @@ export default function Home() {
 
     const timePart = date
       .toLocaleTimeString('en-US', {
+        timeZone: APP_TIME_ZONE,
         hour: 'numeric',
         minute: '2-digit',
         hour12: true
