@@ -44,6 +44,12 @@ type RankingMovementEntry = {
   correct_results: number
 }
 
+type MatchGroup = {
+  dateKey: string
+  dateLabel: string
+  matches: Match[]
+}
+
 export default function Home() {
   const [matches, setMatches] = useState<Match[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -110,6 +116,9 @@ export default function Home() {
     (match) => new Date(match.kickoff) <= new Date()
   )
 
+  const openMatchGroups = groupMatchesByDate(openMatches)
+  const closedMatchGroups = groupMatchesByDate(closedMatches)
+
   const wentUp = movements.filter(
     (movement) => movement.movement_type === 'subio'
   )
@@ -131,6 +140,38 @@ export default function Home() {
   const savedPredictionCount = Object.values(predictions).filter(
     (prediction) => prediction.home !== '' && prediction.away !== ''
   ).length
+
+  function groupMatchesByDate(matchesToGroup: Match[]): MatchGroup[] {
+    const groups: Record<string, Match[]> = {}
+
+    matchesToGroup.forEach((match) => {
+      const date = new Date(match.kickoff)
+
+      const dateKey = date.toISOString().split('T')[0]
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = []
+      }
+
+      groups[dateKey].push(match)
+    })
+
+    return Object.keys(groups)
+      .sort()
+      .map((dateKey) => {
+        const date = new Date(`${dateKey}T12:00:00`)
+
+        return {
+          dateKey,
+          dateLabel: date.toLocaleDateString('es-MX', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long'
+          }),
+          matches: groups[dateKey]
+        }
+      })
+  }
 
   async function loginWithPin() {
     if (selectedLoginName === '' || loginPinInput.trim() === '') {
@@ -440,7 +481,7 @@ export default function Home() {
         }}
       >
         {currentParticipant ? (
-          <div>
+          <div className="login-pill">
             👤 {currentParticipant.name}
 
             <button
@@ -457,7 +498,9 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <>
+          <div className="participant-login-card">
+            <span className="mobile-login-title">Entrar a la quiniela</span>
+
             <select
               value={selectedLoginName}
               onChange={(e) => setSelectedLoginName(e.target.value)}
@@ -501,11 +544,11 @@ export default function Home() {
             >
               Entrar
             </button>
-          </>
+          </div>
         )}
 
         {isAdmin ? (
-          <div>
+          <div className="login-pill">
             🛠️ Admin activo
 
             <button
@@ -522,7 +565,7 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <>
+          <div className="admin-login-card">
             <input
               type="password"
               placeholder="PIN admin"
@@ -548,9 +591,23 @@ export default function Home() {
             >
               Activar admin
             </button>
-          </>
+          </div>
         )}
       </div>
+    )
+  }
+
+  function renderNavBar() {
+    return (
+      <nav className="quick-nav">
+        <a href="#inicio">Inicio</a>
+
+        {currentParticipant && <a href="#mi-quiniela">Mi Quiniela</a>}
+
+        <a href="#partidos">Partidos</a>
+        <a href="#tabla">Tabla</a>
+        <a href="#movimiento">Movimiento</a>
+      </nav>
     )
   }
 
@@ -559,129 +616,114 @@ export default function Home() {
       return null
     }
 
+    const isTopThree =
+      currentLeaderboardEntry && currentLeaderboardEntry.position <= 3
+
     return (
       <section
+        id="mi-quiniela"
+        className="my-summary-card"
         style={{
           background: 'white',
           color: '#222',
-          borderRadius: '20px',
-          padding: '20px',
-          marginBottom: '25px'
+          borderRadius: '24px',
+          padding: '24px',
+          marginBottom: '25px',
+          border: isTopThree ? '3px solid #f7c948' : 'none'
         }}
       >
-        <h2 style={{ marginBottom: '15px', textAlign: 'center' }}>
-          👤 Mi Quiniela
-        </h2>
-
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-            gap: '14px'
+            gridTemplateColumns: 'minmax(220px, 0.8fr) 1.2fr',
+            gap: '20px',
+            alignItems: 'center'
           }}
+          className="my-summary-grid"
         >
           <div
             style={{
-              padding: '15px',
-              borderRadius: '14px',
-              background: '#f8f8f8',
+              borderRadius: '22px',
+              padding: '22px',
+              background: 'linear-gradient(135deg,#006847,#004d36)',
+              color: 'white',
               textAlign: 'center'
             }}
           >
-            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+            <div style={{ fontSize: '2.4rem', marginBottom: '8px' }}>👤</div>
+
+            <div style={{ opacity: 0.85, fontSize: '0.9rem' }}>
               Participante
             </div>
-            <strong style={{ fontSize: '1.2rem' }}>
-              {currentParticipant.name}
-            </strong>
-          </div>
 
-          <div
-            style={{
-              padding: '15px',
-              borderRadius: '14px',
-              background: '#f8f8f8',
-              textAlign: 'center'
-            }}
-          >
-            <div style={{ color: '#777', fontSize: '0.85rem' }}>
-              Posición
-            </div>
-            <strong style={{ fontSize: '1.2rem' }}>
+            <h2 style={{ margin: '6px 0 14px' }}>
+              {currentParticipant.name}
+            </h2>
+
+            <div
+              style={{
+                display: 'inline-block',
+                padding: '8px 14px',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.16)',
+                fontWeight: 'bold'
+              }}
+            >
               {currentLeaderboardEntry
                 ? `#${currentLeaderboardEntry.position}`
-                : '-'}
-            </strong>
+                : 'Sin posición'}
+            </div>
           </div>
 
           <div
+            className="my-stat-grid"
             style={{
-              padding: '15px',
-              borderRadius: '14px',
-              background: '#f8f8f8',
-              textAlign: 'center'
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '12px'
             }}
           >
-            <div style={{ color: '#777', fontSize: '0.85rem' }}>
-              Puntos
+            <div className="my-stat-card">
+              <span>Puntos</span>
+              <strong>
+                {currentLeaderboardEntry
+                  ? currentLeaderboardEntry.total_points
+                  : 0}
+              </strong>
             </div>
-            <strong style={{ fontSize: '1.2rem' }}>
-              {currentLeaderboardEntry
-                ? currentLeaderboardEntry.total_points
-                : 0}
-            </strong>
-          </div>
 
-          <div
-            style={{
-              padding: '15px',
-              borderRadius: '14px',
-              background: '#f8f8f8',
-              textAlign: 'center'
-            }}
-          >
-            <div style={{ color: '#777', fontSize: '0.85rem' }}>
-              Pronósticos guardados
+            <div className="my-stat-card">
+              <span>Pronósticos</span>
+              <strong>{savedPredictionCount}</strong>
             </div>
-            <strong style={{ fontSize: '1.2rem' }}>
-              {savedPredictionCount}
-            </strong>
-          </div>
 
-          <div
-            style={{
-              padding: '15px',
-              borderRadius: '14px',
-              background: '#f8f8f8',
-              textAlign: 'center'
-            }}
-          >
-            <div style={{ color: '#777', fontSize: '0.85rem' }}>
-              Marcadores exactos
+            <div className="my-stat-card">
+              <span>Exactos</span>
+              <strong>
+                {currentLeaderboardEntry
+                  ? currentLeaderboardEntry.exact_scores
+                  : 0}
+              </strong>
             </div>
-            <strong style={{ fontSize: '1.2rem' }}>
-              {currentLeaderboardEntry
-                ? currentLeaderboardEntry.exact_scores
-                : 0}
-            </strong>
-          </div>
 
-          <div
-            style={{
-              padding: '15px',
-              borderRadius: '14px',
-              background: '#f8f8f8',
-              textAlign: 'center'
-            }}
-          >
-            <div style={{ color: '#777', fontSize: '0.85rem' }}>
-              Resultados acertados
+            <div className="my-stat-card">
+              <span>Acertados</span>
+              <strong>
+                {currentLeaderboardEntry
+                  ? currentLeaderboardEntry.correct_results
+                  : 0}
+              </strong>
             </div>
-            <strong style={{ fontSize: '1.2rem' }}>
-              {currentLeaderboardEntry
-                ? currentLeaderboardEntry.correct_results
-                : 0}
-            </strong>
+
+            <div className="my-stat-card">
+              <span>Partidos abiertos</span>
+              <strong>{openMatches.length}</strong>
+            </div>
+
+            <div className="my-stat-card">
+              <span>Partidos cerrados</span>
+              <strong>{closedMatches.length}</strong>
+            </div>
           </div>
         </div>
       </section>
@@ -774,12 +816,38 @@ export default function Home() {
     )
   }
 
+  function getMatchBadge(match: Match, locked: boolean, hasFinalScore: boolean) {
+    if (hasFinalScore || match.status === 'finished') {
+      return {
+        label: '✅ Resultado capturado',
+        background: '#e9f8ef',
+        color: '#006847'
+      }
+    }
+
+    if (locked) {
+      return {
+        label: '🔒 Cerrado',
+        background: '#eeeeee',
+        color: '#555'
+      }
+    }
+
+    return {
+      label: '🟢 Abierto',
+      background: '#e9f8ef',
+      color: '#006847'
+    }
+  }
+
   function renderMatchCard(match: Match, locked: boolean) {
     const hasFinalScore =
       match.home_score !== null &&
       match.home_score !== undefined &&
       match.away_score !== null &&
       match.away_score !== undefined
+
+    const badge = getMatchBadge(match, locked, hasFinalScore)
 
     const adminHomeValue =
       resultInputs[match.id]?.home ??
@@ -799,7 +867,7 @@ export default function Home() {
         className="match-card"
         style={{
           border: '2px solid #e5e5e5',
-          borderRadius: '14px',
+          borderRadius: '16px',
           padding: '18px',
           marginBottom: '15px',
           background: '#fafafa',
@@ -808,13 +876,23 @@ export default function Home() {
       >
         <div
           style={{
-            fontSize: '1.15rem',
-            fontWeight: 'bold',
-            marginBottom: '15px',
-            color: locked ? '#777' : '#006847'
+            display: 'flex',
+            justifyContent: 'center',
+            marginBottom: '12px'
           }}
         >
-          {locked ? '🔒 Partido Cerrado' : '⚽ Pronóstico Abierto'}
+          <span
+            style={{
+              padding: '7px 12px',
+              borderRadius: '999px',
+              background: badge.background,
+              color: badge.color,
+              fontWeight: 'bold',
+              fontSize: '0.82rem'
+            }}
+          >
+            {badge.label}
+          </span>
         </div>
 
         <div
@@ -1043,54 +1121,126 @@ export default function Home() {
     )
   }
 
-  function renderMovementList(
-    entries: RankingMovementEntry[],
-    emptyText: string
-  ) {
-    if (entries.length === 0) {
-      return <p style={{ color: '#777', marginTop: '10px' }}>{emptyText}</p>
+  function renderMatchGroups(groups: MatchGroup[], emptyText: string) {
+    if (groups.length === 0) {
+      return <p style={{ color: '#777', marginBottom: '20px' }}>{emptyText}</p>
     }
 
-    return entries.map((entry) => (
-      <div
-        key={entry.id}
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid #eee',
-          padding: '8px 0'
-        }}
-      >
-        <span>
-          <strong>{entry.name}</strong>
-          <br />
-          <small style={{ color: '#777' }}>
-            #{entry.previous_position ?? '-'} → #{entry.current_position}
-          </small>
-        </span>
-
-        <strong
+    return groups.map((group) => (
+      <div key={group.dateKey}>
+        <div
+          className="date-group-title"
           style={{
-            color:
-              entry.movement_type === 'subio'
-                ? '#006847'
-                : entry.movement_type === 'bajo'
-                  ? '#b00020'
-                  : '#777'
+            margin: '18px 0 12px',
+            padding: '9px 12px',
+            borderRadius: '999px',
+            background: '#f0f4f2',
+            color: '#006847',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            textTransform: 'capitalize'
           }}
         >
-          {entry.movement_type === 'subio'
-            ? `+${entry.movement}`
-            : entry.movement_type === 'bajo'
-              ? entry.movement
-              : '0'}
-        </strong>
+          {group.dateLabel}
+        </div>
+
+        {group.matches.map((match) =>
+          renderMatchCard(match, new Date(match.kickoff) <= new Date())
+        )}
       </div>
     ))
   }
 
+  function renderCompactMovementCard(
+    title: string,
+    entries: RankingMovementEntry[],
+    emptyText: string,
+    accentColor: string
+  ) {
+    return (
+      <div
+        className="movement-card"
+        style={{
+          border: '1px solid #e5e5e5',
+          borderRadius: '14px',
+          padding: '16px',
+          background: '#fafafa'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '10px'
+          }}
+        >
+          <h3 style={{ margin: 0 }}>{title}</h3>
+
+          <span
+            style={{
+              minWidth: '34px',
+              height: '34px',
+              borderRadius: '999px',
+              background: accentColor,
+              color: 'white',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold'
+            }}
+          >
+            {entries.length}
+          </span>
+        </div>
+
+        {entries.length === 0 ? (
+          <p style={{ color: '#777', margin: 0 }}>{emptyText}</p>
+        ) : (
+          <div
+            style={{
+              maxHeight: '170px',
+              overflowY: 'auto',
+              paddingRight: '4px'
+            }}
+          >
+            {entries.map((entry) => (
+              <div
+                key={entry.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  borderTop: '1px solid #eee',
+                  padding: '8px 0'
+                }}
+              >
+                <span>
+                  <strong>{entry.name}</strong>
+                  <br />
+                  <small style={{ color: '#777' }}>
+                    #{entry.previous_position ?? '-'} → #
+                    {entry.current_position}
+                  </small>
+                </span>
+
+                <strong style={{ color: accentColor }}>
+                  {entry.movement_type === 'subio'
+                    ? `+${entry.movement}`
+                    : entry.movement_type === 'bajo'
+                      ? entry.movement
+                      : '0'}
+                </strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <main
+      id="inicio"
       className="app-main"
       style={{
         minHeight: '100vh',
@@ -1134,11 +1284,13 @@ export default function Home() {
           style={{
             textAlign: 'center',
             opacity: 0.9,
-            marginBottom: '40px'
+            marginBottom: '22px'
           }}
         >
           Predice los resultados y compite por el primer lugar
         </p>
+
+        {renderNavBar()}
 
         {renderMySummaryBox()}
 
@@ -1152,6 +1304,7 @@ export default function Home() {
           }}
         >
           <section
+            id="partidos"
             className="dashboard-panel"
             style={{
               background: 'white',
@@ -1159,7 +1312,8 @@ export default function Home() {
               borderRadius: '20px',
               padding: '25px',
               maxHeight: '82vh',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              scrollMarginTop: '90px'
             }}
           >
             <h2 style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -1190,13 +1344,7 @@ export default function Home() {
               🟢 Abiertos
             </h3>
 
-            {openMatches.length === 0 ? (
-              <p style={{ color: '#777', marginBottom: '20px' }}>
-                No hay partidos abiertos
-              </p>
-            ) : (
-              openMatches.map((match) => renderMatchCard(match, false))
-            )}
+            {renderMatchGroups(openMatchGroups, 'No hay partidos abiertos')}
 
             <h3
               style={{
@@ -1209,14 +1357,11 @@ export default function Home() {
               🔒 Cerrados
             </h3>
 
-            {closedMatches.length === 0 ? (
-              <p style={{ color: '#777' }}>No hay partidos cerrados</p>
-            ) : (
-              closedMatches.map((match) => renderMatchCard(match, true))
-            )}
+            {renderMatchGroups(closedMatchGroups, 'No hay partidos cerrados')}
           </section>
 
           <section
+            id="tabla"
             className="dashboard-panel"
             style={{
               background: 'white',
@@ -1226,7 +1371,8 @@ export default function Home() {
               maxHeight: '82vh',
               overflowY: 'auto',
               position: 'sticky',
-              top: '20px'
+              top: '20px',
+              scrollMarginTop: '90px'
             }}
           >
             <h2 style={{ marginBottom: '10px' }}>🏅 Tabla General</h2>
@@ -1254,6 +1400,9 @@ export default function Home() {
                         ? '🥉'
                         : `#${entry.position}`
 
+                const isCurrentParticipant =
+                  currentParticipant && entry.id === currentParticipant.id
+
                 return (
                   <div
                     key={entry.id}
@@ -1263,14 +1412,19 @@ export default function Home() {
                       gridTemplateColumns: '60px 1fr 90px',
                       alignItems: 'center',
                       gap: '10px',
-                      padding: '12px 0',
-                      borderBottom: '1px solid #eee'
+                      padding: '12px',
+                      borderBottom: '1px solid #eee',
+                      borderRadius: '12px',
+                      background: isCurrentParticipant ? '#e9f8ef' : 'white'
                     }}
                   >
                     <strong>{medal}</strong>
 
                     <div>
-                      <strong>{entry.name}</strong>
+                      <strong>
+                        {entry.name}
+                        {isCurrentParticipant ? ' 👈 Tú' : ''}
+                      </strong>
 
                       <div
                         style={{
@@ -1295,6 +1449,7 @@ export default function Home() {
         </div>
 
         <section
+          id="movimiento"
           className="movement-section"
           style={{
             marginTop: '25px',
@@ -1304,13 +1459,14 @@ export default function Home() {
             padding: '25px',
             maxWidth: '1100px',
             marginLeft: 'auto',
-            marginRight: 'auto'
+            marginRight: 'auto',
+            scrollMarginTop: '90px'
           }}
         >
-          <h2 style={{ marginBottom: '15px' }}>📈 Movimiento en la Tabla</h2>
+          <h2 style={{ marginBottom: '8px' }}>📈 Movimiento en la Tabla</h2>
 
-          <p style={{ color: '#666', marginBottom: '15px' }}>
-            Cambios de posición comparando el ranking actual contra el snapshot
+          <p style={{ color: '#666', marginBottom: '18px' }}>
+            Resumen de cambios comparando el ranking actual contra el snapshot
             anterior.
           </p>
 
@@ -1323,43 +1479,40 @@ export default function Home() {
               alignItems: 'start'
             }}
           >
-            <div
-              style={{
-                border: '1px solid #e5e5e5',
-                borderRadius: '12px',
-                padding: '15px',
-                background: '#f8fff8'
-              }}
-            >
-              <h3>⬆️ Subieron</h3>
-              {renderMovementList(wentUp, 'Nadie subió todavía')}
-            </div>
+            {renderCompactMovementCard(
+              '⬆️ Subieron',
+              wentUp,
+              'Nadie subió todavía',
+              '#006847'
+            )}
 
-            <div
-              style={{
-                border: '1px solid #e5e5e5',
-                borderRadius: '12px',
-                padding: '15px',
-                background: '#fffdf5'
-              }}
-            >
-              <h3>➡️ Sin Cambio / Nuevos</h3>
-              {renderMovementList(stayedSame, 'Sin movimientos todavía')}
-            </div>
+            {renderCompactMovementCard(
+              '➡️ Igual / Nuevos',
+              stayedSame,
+              'Sin movimientos todavía',
+              '#777'
+            )}
 
-            <div
-              style={{
-                border: '1px solid #e5e5e5',
-                borderRadius: '12px',
-                padding: '15px',
-                background: '#fff8f8'
-              }}
-            >
-              <h3>⬇️ Bajaron</h3>
-              {renderMovementList(wentDown, 'Nadie bajó todavía')}
-            </div>
+            {renderCompactMovementCard(
+              '⬇️ Bajaron',
+              wentDown,
+              'Nadie bajó todavía',
+              '#b00020'
+            )}
           </div>
         </section>
+
+        <footer
+          style={{
+            textAlign: 'center',
+            marginTop: '26px',
+            padding: '18px',
+            opacity: 0.85,
+            fontSize: '0.9rem'
+          }}
+        >
+          IPAM Quiniela Mundialista 2026 · Uso interno
+        </footer>
       </div>
     </main>
   )
