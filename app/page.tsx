@@ -840,6 +840,25 @@ export default function Home() {
     }
   }
 
+  function formatMatchDate(kickoff: string) {
+    const date = new Date(kickoff)
+
+    const datePart = date.toLocaleDateString('es-MX', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
+    })
+
+    const timePart = date
+      .toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      })
+      .toLowerCase()
+
+    return `${datePart} · ${timePart}`
+  }
   function renderMatchCard(match: Match, locked: boolean) {
     const hasFinalScore =
       match.home_score !== null &&
@@ -976,7 +995,7 @@ export default function Home() {
             marginTop: '15px'
           }}
         >
-          📅 {new Date(match.kickoff).toLocaleString('es-MX')}
+          📅 {formatMatchDate(match.kickoff)}
         </div>
 
         {hasFinalScore && (
@@ -1466,7 +1485,7 @@ export default function Home() {
           <h2 style={{ marginBottom: '8px' }}>📈 Movimiento en la Tabla</h2>
 
           <p style={{ color: '#666', marginBottom: '18px' }}>
-            Resumen de cambios comparando el ranking actual contra el snapshot
+            Resumen de cambios comparando el ranking actual contra el ranking
             anterior.
           </p>
 
