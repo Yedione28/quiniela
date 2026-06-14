@@ -367,7 +367,8 @@ export default function Home() {
       return
     }
 
-    const kickoffDate = new Date(`${newMatchKickoff}:00-06:00`)
+    const kickoffDate = new Date(newMatchKickoff)
+    const kickoffForDatabase = `${newMatchKickoff.replace('T', ' ')}:00`
 
     if (Number.isNaN(kickoffDate.getTime())) {
       alert('La fecha/hora no es válida')
@@ -378,7 +379,7 @@ export default function Home() {
       p_admin_pin: adminPin,
       p_home_team: newMatchHome.trim(),
       p_away_team: newMatchAway.trim(),
-      p_kickoff: kickoffDate.toISOString()
+      p_kickoff: kickoffForDatabase
     })
 
     if (error) {
