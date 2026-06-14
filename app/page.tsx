@@ -124,6 +124,14 @@ export default function Home() {
       movement.movement_type === 'nuevo'
   )
 
+  const currentLeaderboardEntry = currentParticipant
+    ? leaderboard.find((entry) => entry.id === currentParticipant.id)
+    : null
+
+  const savedPredictionCount = Object.values(predictions).filter(
+    (prediction) => prediction.home !== '' && prediction.away !== ''
+  ).length
+
   async function loginWithPin() {
     if (selectedLoginName === '' || loginPinInput.trim() === '') {
       alert('Selecciona tu nombre e ingresa tu PIN')
@@ -543,6 +551,140 @@ export default function Home() {
           </>
         )}
       </div>
+    )
+  }
+
+  function renderMySummaryBox() {
+    if (!currentParticipant) {
+      return null
+    }
+
+    return (
+      <section
+        style={{
+          background: 'white',
+          color: '#222',
+          borderRadius: '20px',
+          padding: '20px',
+          marginBottom: '25px'
+        }}
+      >
+        <h2 style={{ marginBottom: '15px', textAlign: 'center' }}>
+          👤 Mi Quiniela
+        </h2>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+            gap: '14px'
+          }}
+        >
+          <div
+            style={{
+              padding: '15px',
+              borderRadius: '14px',
+              background: '#f8f8f8',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+              Participante
+            </div>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {currentParticipant.name}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding: '15px',
+              borderRadius: '14px',
+              background: '#f8f8f8',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+              Posición
+            </div>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {currentLeaderboardEntry
+                ? `#${currentLeaderboardEntry.position}`
+                : '-'}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding: '15px',
+              borderRadius: '14px',
+              background: '#f8f8f8',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+              Puntos
+            </div>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {currentLeaderboardEntry
+                ? currentLeaderboardEntry.total_points
+                : 0}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding: '15px',
+              borderRadius: '14px',
+              background: '#f8f8f8',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+              Pronósticos guardados
+            </div>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {savedPredictionCount}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding: '15px',
+              borderRadius: '14px',
+              background: '#f8f8f8',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+              Marcadores exactos
+            </div>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {currentLeaderboardEntry
+                ? currentLeaderboardEntry.exact_scores
+                : 0}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding: '15px',
+              borderRadius: '14px',
+              background: '#f8f8f8',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ color: '#777', fontSize: '0.85rem' }}>
+              Resultados acertados
+            </div>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {currentLeaderboardEntry
+                ? currentLeaderboardEntry.correct_results
+                : 0}
+            </strong>
+          </div>
+        </div>
+      </section>
     )
   }
 
@@ -997,6 +1139,8 @@ export default function Home() {
         >
           Predice los resultados y compite por el primer lugar
         </p>
+
+        {renderMySummaryBox()}
 
         <div
           className="dashboard-grid"
