@@ -1087,7 +1087,7 @@ export default function Home() {
         }}
       >
         <h2 style={{ marginBottom: '8px', textAlign: 'center' }}>
-          👀 Pronósticos en curso
+          👀 Pronósticos del partido actual / siguiente
         </h2>
 
         <p
@@ -1097,8 +1097,9 @@ export default function Home() {
             marginBottom: '18px'
           }}
         >
-          Aquí puedes ver los pronósticos de todos únicamente cuando el partido
-          ya empezó. Los partidos futuros permanecen ocultos.
+          Aquí puedes ver los pronósticos de todos para un solo partido: si hay
+          un partido en curso, se muestra ese; si no, se muestra el siguiente
+          partido pendiente. Los partidos terminados ya no aparecen aquí.
         </p>
 
         {groupedMatches.length === 0 ? (
@@ -1109,7 +1110,7 @@ export default function Home() {
               margin: 0
             }}
           >
-            No hay partidos en curso en este momento.
+            No hay partido actual o siguiente en este momento.
           </p>
         ) : (
           groupedMatches.map((match) => {
@@ -2234,8 +2235,6 @@ export default function Home() {
 
         {renderChampionPredictionBox()}
 
-        {renderLivePredictionsBox()}
-
         <div
           className="dashboard-grid"
           style={{
@@ -2389,6 +2388,8 @@ export default function Home() {
             )}
           </section>
         </div>
+
+        {renderLivePredictionsBox()}
 
         <section
           id="movimiento"
