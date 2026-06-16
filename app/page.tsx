@@ -94,6 +94,10 @@ export default function Home() {
     AdminMatchPrediction[]
   >([])
 
+  const [adminParticipantSearch, setAdminParticipantSearch] = useState('')
+  const [adminMatchFilter, setAdminMatchFilter] = useState('all')
+  const [adminStatusFilter, setAdminStatusFilter] = useState('all')
+
   const [currentParticipant, setCurrentParticipant] =
     useState<CurrentParticipant | null>(null)
 
@@ -325,6 +329,9 @@ export default function Home() {
   function logoutAdmin() {
     setAdminChampionPredictions([])
     setAdminMatchPredictions([])
+    setAdminParticipantSearch('')
+    setAdminMatchFilter('all')
+    setAdminStatusFilter('all')
     setIsAdmin(false)
     setAdminPin('')
     localStorage.removeItem('quiniela_admin_pin')
@@ -928,7 +935,7 @@ export default function Home() {
           }}
         >
           Solo puedes elegir un equipo. Después de guardar tu respuesta,
-          quedará bloqueada y no podrás cambiarla.
+          quedará bloqueada y ya no podrás cambiarla.
         </p>
 
         <div
@@ -996,6 +1003,62 @@ export default function Home() {
     const championCompleted = adminChampionPredictions.filter(
       (entry) => entry.has_prediction
     ).length
+
+    const adminMatchOptions = Array.from(
+      new Map(
+        adminMatchPredictions.map((entry) => [
+          String(entry.match_id),
+          {
+            match_id: entry.match_id,
+            home_team: entry.home_team,
+            away_team: entry.away_team,
+            kickoff: entry.kickoff
+          }
+        ])
+      ).values()
+    )
+
+    const filteredAdminMatchPredictions = adminMatchPredictions.filter(
+      (entry) => {
+        const hasPrediction =
+          entry.predicted_home !== null &&
+          entry.predicted_home !== undefined &&
+          entry.predicted_away !== null &&
+          entry.predicted_away !== undefined
+
+        const matchesParticipant =
+          adminParticipantSearch.trim() === '' ||
+          entry.participant_name
+            .toLowerCase()
+            .includes(adminParticipantSearch.trim().toLowerCase())
+
+        const matchesMatch =
+          adminMatchFilter === 'all' ||
+          String(entry.match_id) === adminMatchFilter
+
+        const matchesStatus =
+          adminStatusFilter === 'all' ||
+          (adminStatusFilter === 'saved' && hasPrediction) ||
+          (adminStatusFilter === 'pending' && !hasPrediction)
+
+        return matchesParticipant && matchesMatch && matchesStatus
+      }
+    )
+
+    const savedFilteredCount = filteredAdminMatchPredictions.filter((entry) => {
+      return (
+        entry.predicted_home !== null &&
+        entry.predicted_home !== undefined &&
+        entry.predicted_away !== null &&
+        entry.predicted_away !== undefined
+      )
+    }).length
+
+    function clearAdminFilters() {
+      setAdminParticipantSearch('')
+      setAdminMatchFilter('all')
+      setAdminStatusFilter('all')
+    }
 
     return (
       <section
@@ -1079,7 +1142,9 @@ export default function Home() {
                           style={{
                             padding: '8px',
                             borderTop: '1px solid #eee',
-                            fontWeight: entry.has_prediction ? 'bold' : 'normal'
+                            fontWeight: entry.has_prediction
+                              ? 'bold'
+                              : 'normal'
                           }}
                         >
                           {entry.team_name || '-'}
@@ -1120,9 +1185,137 @@ export default function Home() {
               guardado pronóstico, aparece como pendiente.
             </p>
 
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr auto',
+                gap: '10px',
+                marginBottom: '14px',
+                alignItems: 'end'
+              }}
+              className="admin-filter-grid"
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    color: '#666',
+                    marginBottom: '5px'
+                  }}
+                >
+                  Buscar participante
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="Ejemplo: Atenea"
+                  value={adminParticipantSearch}
+                  onChange={(e) => setAdminParticipantSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px',
+                    borderRadius: '8px',
+                    border: '1px solid #ccc'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    color: '#666',
+                    marginBottom: '5px'
+                  }}
+                >
+                  Filtrar partido
+                </label>
+
+                <select
+                  value={adminMatchFilter}
+                  onChange={(e) => setAdminMatchFilter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px',
+                    borderRadius: '8px',
+                    border: '1px solid #ccc'
+                  }}
+                >
+                  <option value="all">Todos los partidos</option>
+
+                  {adminMatchOptions.map((match) => (
+                    <option key={match.match_id} value={String(match.match_id)}>
+                      {match.home_team} vs {match.away_team}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    color: '#666',
+                    marginBottom: '5px'
+                  }}
+                >
+                  Estado
+                </label>
+
+                <select
+                  value={adminStatusFilter}
+                  onChange={(e) => setAdminStatusFilter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px',
+                    borderRadius: '8px',
+                    border: '1px solid #ccc'
+                  }}
+                >
+                  <option value="all">Todos</option>
+                  <option value="saved">Solo guardados</option>
+                  <option value="pending">Solo pendientes</option>
+                </select>
+              </div>
+
+              <button
+                onClick={clearAdminFilters}
+                style={{
+                  padding: '10px 13px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  background: '#777',
+                  color: 'white',
+                  fontWeight: 'bold'
+                }}
+              >
+                Limpiar
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginBottom: '12px',
+                color: '#666',
+                fontSize: '0.9rem'
+              }}
+            >
+              Mostrando {filteredAdminMatchPredictions.length} de{' '}
+              {adminMatchPredictions.length} filas · Guardados en filtro:{' '}
+              {savedFilteredCount}
+            </div>
+
             {adminMatchPredictions.length === 0 ? (
               <p style={{ color: '#777' }}>
                 No hay partidos o participantes todavía
+              </p>
+            ) : filteredAdminMatchPredictions.length === 0 ? (
+              <p style={{ color: '#777' }}>
+                No hay resultados con esos filtros
               </p>
             ) : (
               <div
@@ -1156,7 +1349,7 @@ export default function Home() {
                   </thead>
 
                   <tbody>
-                    {adminMatchPredictions.map((entry, index) => {
+                    {filteredAdminMatchPredictions.map((entry, index) => {
                       const hasPrediction =
                         entry.predicted_home !== null &&
                         entry.predicted_home !== undefined &&

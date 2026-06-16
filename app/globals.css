@@ -329,3 +329,9 @@ html {
     grid-template-columns: 1fr !important;
   }
 }
+
+@media (max-width: 900px) {
+  .admin-filter-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
