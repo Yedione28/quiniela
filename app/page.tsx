@@ -74,6 +74,17 @@ type AdminMatchPrediction = {
   created_at: string | null
 }
 
+type LivePredictionEntry = {
+  match_id: number
+  home_team: string
+  away_team: string
+  kickoff: string
+  participant_name: string
+  predicted_home: number | null
+  predicted_away: number | null
+  has_prediction: boolean
+}
+
 const APP_TIME_ZONE = 'America/Mexico_City'
 
 export default function Home() {
@@ -97,6 +108,10 @@ export default function Home() {
   const [adminParticipantSearch, setAdminParticipantSearch] = useState('')
   const [adminMatchFilter, setAdminMatchFilter] = useState('all')
   const [adminStatusFilter, setAdminStatusFilter] = useState('all')
+
+  const [livePredictions, setLivePredictions] = useState<LivePredictionEntry[]>(
+    []
+  )
 
   const [currentParticipant, setCurrentParticipant] =
     useState<CurrentParticipant | null>(null)
@@ -142,6 +157,7 @@ export default function Home() {
       setParticipantPin(savedParticipantPin)
       loadPredictionsForParticipant(savedParticipantId, savedParticipantPin)
       loadChampionPrediction(savedParticipantId, savedParticipantPin)
+      loadLivePredictions(savedParticipantId, savedParticipantPin)
     }
 
     const savedAdminPin = localStorage.getItem('quiniela_admin_pin')
@@ -150,6 +166,22 @@ export default function Home() {
       checkAdminPin(savedAdminPin, false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!currentParticipant || !participantPin) {
+      return
+    }
+
+    loadLivePredictions(currentParticipant.id, participantPin)
+
+    const intervalId = window.setInterval(() => {
+      loadLivePredictions(currentParticipant.id, participantPin)
+    }, 60000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [currentParticipant, participantPin])
 
   const openMatches = matches.filter(
     (match) => new Date(match.kickoff) > new Date()
@@ -267,11 +299,13 @@ export default function Home() {
 
     loadPredictionsForParticipant(loggedUser.user_id, loginPinInput.trim())
     loadChampionPrediction(loggedUser.user_id, loginPinInput.trim())
+    loadLivePredictions(loggedUser.user_id, loginPinInput.trim())
   }
 
   function logoutParticipant() {
     setChampionPrediction(null)
     setChampionInput('')
+    setLivePredictions([])
     setCurrentParticipant(null)
     setParticipantPin('')
     setPredictions({})
@@ -397,6 +431,20 @@ export default function Home() {
     }
   }
 
+  async function loadLivePredictions(userId: string, pinCode: string) {
+    const { data, error } = await supabase.rpc('get_live_predictions_by_pin', {
+      p_user_id: userId,
+      p_pin_code: pinCode
+    })
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setLivePredictions(data || [])
+  }
+
   async function saveChampionPrediction() {
     if (!currentParticipant) {
       alert('Debes entrar con tu nombre y PIN')
@@ -502,6 +550,8 @@ export default function Home() {
     if (isAdmin) {
       loadAdminMatchPredictions(adminPin)
     }
+
+    loadLivePredictions(currentParticipant.id, participantPin)
   }
 
   async function addNewMatch() {
@@ -592,6 +642,10 @@ export default function Home() {
     loadMatches()
     loadLeaderboard()
     loadMovements()
+
+    if (currentParticipant) {
+      loadLivePredictions(currentParticipant.id, participantPin)
+    }
   }
 
   async function loadMatches() {
@@ -773,6 +827,8 @@ export default function Home() {
 
         {currentParticipant && <a href="#campeon">Campeón</a>}
 
+        {currentParticipant && <a href="#predicciones-en-vivo">En curso</a>}
+
         <a href="#partidos">Partidos</a>
         <a href="#tabla">Tabla</a>
 
@@ -934,8 +990,8 @@ export default function Home() {
             marginBottom: '16px'
           }}
         >
-          Solo puedes elegir un equipo. Después de guardar tu respuesta,
-          quedará bloqueada y ya no podrás cambiarla.
+          Solo puedes elegir un equipo. Después de guardar tu respuesta, quedará
+          bloqueada y no podrás cambiarla.
         </p>
 
         <div
@@ -990,6 +1046,175 @@ export default function Home() {
           >
             Tu campeón elegido: {championPrediction.team_name}
           </p>
+        )}
+      </section>
+    )
+  }
+
+  function renderLivePredictionsBox() {
+    if (!currentParticipant) {
+      return null
+    }
+
+    const groupedMatches = Array.from(
+      new Map(
+        livePredictions.map((entry) => [
+          String(entry.match_id),
+          {
+            match_id: entry.match_id,
+            home_team: entry.home_team,
+            away_team: entry.away_team,
+            kickoff: entry.kickoff,
+            entries: livePredictions.filter(
+              (prediction) => prediction.match_id === entry.match_id
+            )
+          }
+        ])
+      ).values()
+    )
+
+    return (
+      <section
+        id="predicciones-en-vivo"
+        style={{
+          background: 'white',
+          color: '#222',
+          borderRadius: '20px',
+          padding: '22px',
+          marginBottom: '25px',
+          border: '2px solid #006847',
+          scrollMarginTop: '90px'
+        }}
+      >
+        <h2 style={{ marginBottom: '8px', textAlign: 'center' }}>
+          👀 Pronósticos en curso
+        </h2>
+
+        <p
+          style={{
+            color: '#666',
+            textAlign: 'center',
+            marginBottom: '18px'
+          }}
+        >
+          Aquí puedes ver los pronósticos de todos únicamente cuando el partido
+          ya empezó. Los partidos futuros permanecen ocultos.
+        </p>
+
+        {groupedMatches.length === 0 ? (
+          <p
+            style={{
+              color: '#777',
+              textAlign: 'center',
+              margin: 0
+            }}
+          >
+            No hay partidos en curso en este momento.
+          </p>
+        ) : (
+          groupedMatches.map((match) => {
+            const savedCount = match.entries.filter(
+              (entry) => entry.has_prediction
+            ).length
+
+            return (
+              <div
+                key={match.match_id}
+                style={{
+                  border: '1px solid #e5e5e5',
+                  borderRadius: '14px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  background: '#fafafa'
+                }}
+              >
+                <h3 style={{ marginBottom: '5px', textAlign: 'center' }}>
+                  {match.home_team} vs {match.away_team}
+                </h3>
+
+                <p
+                  style={{
+                    color: '#777',
+                    textAlign: 'center',
+                    marginBottom: '12px',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {formatMatchDate(match.kickoff)} · {savedCount}/
+                  {match.entries.length} pronósticos guardados
+                </p>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table
+                    style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '8px' }}>
+                          Participante
+                        </th>
+                        <th style={{ textAlign: 'center', padding: '8px' }}>
+                          Pronóstico
+                        </th>
+                        <th style={{ textAlign: 'center', padding: '8px' }}>
+                          Estado
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {match.entries.map((entry) => (
+                        <tr key={`${entry.match_id}-${entry.participant_name}`}>
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee'
+                            }}
+                          >
+                            {entry.participant_name}
+                            {currentParticipant.name === entry.participant_name
+                              ? ' 👈 Tú'
+                              : ''}
+                          </td>
+
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee',
+                              textAlign: 'center',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {entry.has_prediction
+                              ? `${entry.predicted_home} - ${entry.predicted_away}`
+                              : '-'}
+                          </td>
+
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee',
+                              textAlign: 'center',
+                              color: entry.has_prediction
+                                ? '#006847'
+                                : '#b00020',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {entry.has_prediction ? 'Guardado' : 'Pendiente'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })
         )}
       </section>
     )
@@ -2008,6 +2233,8 @@ export default function Home() {
         {renderMySummaryBox()}
 
         {renderChampionPredictionBox()}
+
+        {renderLivePredictionsBox()}
 
         <div
           className="dashboard-grid"
