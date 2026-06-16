@@ -1076,6 +1076,7 @@ export default function Home() {
     return (
       <section
         id="predicciones-en-vivo"
+        className="live-predictions-section"
         style={{
           background: 'white',
           color: '#222',
@@ -1097,9 +1098,7 @@ export default function Home() {
             marginBottom: '18px'
           }}
         >
-          Aquí puedes ver los pronósticos de todos para un solo partido: si hay
-          un partido en curso, se muestra ese; si no, se muestra el siguiente
-          partido pendiente. Los partidos terminados ya no aparecen aquí.
+          Aquí puedes ver los pronósticos de todos los participantes del partido en curso o del siguiente partido.
         </p>
 
         {groupedMatches.length === 0 ? (

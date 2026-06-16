@@ -335,3 +335,13 @@ html {
     grid-template-columns: 1fr !important;
   }
 }
+
+.live-predictions-section {
+  margin-top: 42px;
+}
+
+@media (max-width: 900px) {
+  .live-predictions-section {
+    margin-top: 22px;
+  }
+}
