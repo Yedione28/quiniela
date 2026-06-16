@@ -69,9 +69,9 @@ type AdminMatchPrediction = {
   home_team: string
   away_team: string
   kickoff: string
-  predicted_home: number
-  predicted_away: number
-  created_at: string
+  predicted_home: number | null
+  predicted_away: number | null
+  created_at: string | null
 }
 
 const APP_TIME_ZONE = 'America/Mexico_City'
@@ -1079,9 +1079,7 @@ export default function Home() {
                           style={{
                             padding: '8px',
                             borderTop: '1px solid #eee',
-                            fontWeight: entry.has_prediction
-                              ? 'bold'
-                              : 'normal'
+                            fontWeight: entry.has_prediction ? 'bold' : 'normal'
                           }}
                         >
                           {entry.team_name || '-'}
@@ -1114,17 +1112,22 @@ export default function Home() {
             }}
           >
             <h3 style={{ marginBottom: '10px' }}>
-              ⚽ Pronósticos de partidos ({adminMatchPredictions.length})
+              ⚽ Pronósticos de partidos
             </h3>
+
+            <p style={{ color: '#666', marginBottom: '12px' }}>
+              Muestra todos los participantes por partido. Si alguien no ha
+              guardado pronóstico, aparece como pendiente.
+            </p>
 
             {adminMatchPredictions.length === 0 ? (
               <p style={{ color: '#777' }}>
-                Nadie ha guardado pronósticos todavía
+                No hay partidos o participantes todavía
               </p>
             ) : (
               <div
                 style={{
-                  maxHeight: '360px',
+                  maxHeight: '420px',
                   overflow: 'auto'
                 }}
               >
@@ -1146,50 +1149,75 @@ export default function Home() {
                       <th style={{ textAlign: 'center', padding: '8px' }}>
                         Pronóstico
                       </th>
+                      <th style={{ textAlign: 'center', padding: '8px' }}>
+                        Estado
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {adminMatchPredictions.map((entry, index) => (
-                      <tr
-                        key={`${entry.match_id}-${entry.participant_name}-${index}`}
-                      >
-                        <td
-                          style={{
-                            padding: '8px',
-                            borderTop: '1px solid #eee'
-                          }}
-                        >
-                          <strong>
-                            {entry.home_team} vs {entry.away_team}
-                          </strong>
-                          <br />
-                          <small style={{ color: '#777' }}>
-                            {formatMatchDate(entry.kickoff)}
-                          </small>
-                        </td>
+                    {adminMatchPredictions.map((entry, index) => {
+                      const hasPrediction =
+                        entry.predicted_home !== null &&
+                        entry.predicted_home !== undefined &&
+                        entry.predicted_away !== null &&
+                        entry.predicted_away !== undefined
 
-                        <td
-                          style={{
-                            padding: '8px',
-                            borderTop: '1px solid #eee'
-                          }}
+                      return (
+                        <tr
+                          key={`${entry.match_id}-${entry.participant_name}-${index}`}
                         >
-                          {entry.participant_name}
-                        </td>
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee'
+                            }}
+                          >
+                            <strong>
+                              {entry.home_team} vs {entry.away_team}
+                            </strong>
+                            <br />
+                            <small style={{ color: '#777' }}>
+                              {formatMatchDate(entry.kickoff)}
+                            </small>
+                          </td>
 
-                        <td
-                          style={{
-                            padding: '8px',
-                            borderTop: '1px solid #eee',
-                            textAlign: 'center',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {entry.predicted_home} - {entry.predicted_away}
-                        </td>
-                      </tr>
-                    ))}
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee'
+                            }}
+                          >
+                            {entry.participant_name}
+                          </td>
+
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee',
+                              textAlign: 'center',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {hasPrediction
+                              ? `${entry.predicted_home} - ${entry.predicted_away}`
+                              : '-'}
+                          </td>
+
+                          <td
+                            style={{
+                              padding: '8px',
+                              borderTop: '1px solid #eee',
+                              textAlign: 'center',
+                              color: hasPrediction ? '#006847' : '#b00020',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {hasPrediction ? 'Guardado' : 'Pendiente'}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1788,8 +1816,6 @@ export default function Home() {
 
         {renderChampionPredictionBox()}
 
-        {renderAdminPredictionsSection()}
-
         <div
           className="dashboard-grid"
           style={{
@@ -1997,6 +2023,8 @@ export default function Home() {
             )}
           </div>
         </section>
+
+        {renderAdminPredictionsSection()}
 
         <footer
           style={{
