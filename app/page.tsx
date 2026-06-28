@@ -87,6 +87,136 @@ type LivePredictionEntry = {
 
 const APP_TIME_ZONE = 'America/Mexico_City'
 
+
+const TEAM_FLAGS: Record<string, string> = {
+  algeria: '🇩🇿',
+  alemania: '🇩🇪',
+  argentina: '🇦🇷',
+  australia: '🇦🇺',
+  austria: '🇦🇹',
+  belgica: '🇧🇪',
+  belgium: '🇧🇪',
+  bolivia: '🇧🇴',
+  bosnia: '🇧🇦',
+  'bosnia and herzegovina': '🇧🇦',
+  brasil: '🇧🇷',
+  brazil: '🇧🇷',
+  cameron: '🇨🇲',
+  cameroon: '🇨🇲',
+  canada: '🇨🇦',
+  'cape verde': '🇨🇻',
+  'cabo verde': '🇨🇻',
+  chile: '🇨🇱',
+  colombia: '🇨🇴',
+  croacia: '🇭🇷',
+  croatia: '🇭🇷',
+  curacao: '🇨🇼',
+  'costa de marfil': '🇨🇮',
+  'ivory coast': '🇨🇮',
+  'cote divoire': '🇨🇮',
+  dinamarca: '🇩🇰',
+  'dr congo': '🇨🇩',
+  'democratic republic of the congo': '🇨🇩',
+  ecuador: '🇪🇨',
+  egipto: '🇪🇬',
+  egypt: '🇪🇬',
+  england: '🏴',
+  escocia: '🏴',
+  espana: '🇪🇸',
+  spain: '🇪🇸',
+  'estados unidos': '🇺🇸',
+  france: '🇫🇷',
+  francia: '🇫🇷',
+  ghana: '🇬🇭',
+  germany: '🇩🇪',
+  haiti: '🇭🇹',
+  'iran': '🇮🇷',
+  iraq: '🇮🇶',
+  italia: '🇮🇹',
+  italy: '🇮🇹',
+  japon: '🇯🇵',
+  japan: '🇯🇵',
+  jordania: '🇯🇴',
+  jordan: '🇯🇴',
+  'korea del sur': '🇰🇷',
+  'south korea': '🇰🇷',
+  marruecos: '🇲🇦',
+  mexico: '🇲🇽',
+  morocco: '🇲🇦',
+  'nueva zelanda': '🇳🇿',
+  'new zealand': '🇳🇿',
+  netherlands: '🇳🇱',
+  noruega: '🇳🇴',
+  norway: '🇳🇴',
+  'paises bajos': '🇳🇱',
+  panama: '🇵🇦',
+  paraguay: '🇵🇾',
+  peru: '🇵🇪',
+  poland: '🇵🇱',
+  polonia: '🇵🇱',
+  portugal: '🇵🇹',
+  qatar: '🇶🇦',
+  'arabia saudita': '🇸🇦',
+  'saudi arabia': '🇸🇦',
+  senegal: '🇸🇳',
+  serbia: '🇷🇸',
+  'sudafrica': '🇿🇦',
+  'south africa': '🇿🇦',
+  suecia: '🇸🇪',
+  sweden: '🇸🇪',
+  suiza: '🇨🇭',
+  switzerland: '🇨🇭',
+  tunez: '🇹🇳',
+  tunisia: '🇹🇳',
+  turquia: '🇹🇷',
+  turkey: '🇹🇷',
+  uruguay: '🇺🇾',
+  usa: '🇺🇸',
+  'united states': '🇺🇸',
+  uzbekistan: '🇺🇿',
+  venezuela: '🇻🇪'
+}
+
+function normalizeTeamName(team: string) {
+  return team
+    .trim()
+    .toLocaleLowerCase('es-MX')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.'’]/g, '')
+    .replace(/\s+/g, ' ')
+}
+
+function getTeamFlag(team: string) {
+  return TEAM_FLAGS[normalizeTeamName(team)] || '🏳️'
+}
+
+function renderTeamName(team: string) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        justifyContent: 'center',
+        flexWrap: 'wrap'
+      }}
+    >
+      <span style={{ fontSize: '1.2rem' }}>{getTeamFlag(team)}</span>
+      <span>{team}</span>
+    </span>
+  )
+}
+
+function renderMatchTitle(homeTeam: string, awayTeam: string) {
+  return (
+    <>
+      {getTeamFlag(homeTeam)} {homeTeam} <span style={{ color: '#777' }}>vs</span>{' '}
+      {getTeamFlag(awayTeam)} {awayTeam}
+    </>
+  )
+}
+
 export default function Home() {
   const [matches, setMatches] = useState<Match[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -1098,7 +1228,9 @@ export default function Home() {
             marginBottom: '18px'
           }}
         >
-          Aquí puedes ver los pronósticos de todos los participantes del partido en curso o del siguiente partido.
+          Aquí puedes ver los pronósticos de todos para un solo partido: si hay
+          un partido en curso, se muestra ese; si no, se muestra el siguiente
+          partido pendiente. Los partidos terminados ya no aparecen aquí.
         </p>
 
         {groupedMatches.length === 0 ? (
@@ -1129,7 +1261,7 @@ export default function Home() {
                 }}
               >
                 <h3 style={{ marginBottom: '5px', textAlign: 'center' }}>
-                  {match.home_team} vs {match.away_team}
+                  {renderMatchTitle(match.home_team, match.away_team)}
                 </h3>
 
                 <p
@@ -1472,7 +1604,7 @@ export default function Home() {
 
                   {adminMatchOptions.map((match) => (
                     <option key={match.match_id} value={String(match.match_id)}>
-                      {match.home_team} vs {match.away_team}
+                      {`${getTeamFlag(match.home_team)} ${match.home_team} vs ${getTeamFlag(match.away_team)} ${match.away_team}`}
                     </option>
                   ))}
                 </select>
@@ -1592,7 +1724,7 @@ export default function Home() {
                             }}
                           >
                             <strong>
-                              {entry.home_team} vs {entry.away_team}
+                              {renderMatchTitle(entry.home_team, entry.away_team)}
                             </strong>
                             <br />
                             <small style={{ color: '#777' }}>
@@ -1846,7 +1978,7 @@ export default function Home() {
             marginRight: 'auto'
           }}
         >
-          <strong>{match.home_team}</strong>
+          <strong>{renderTeamName(match.home_team)}</strong>
 
           <input
             type="number"
@@ -1883,7 +2015,7 @@ export default function Home() {
             marginRight: 'auto'
           }}
         >
-          <strong>{match.away_team}</strong>
+          <strong>{renderTeamName(match.away_team)}</strong>
 
           <input
             type="number"
@@ -1925,8 +2057,9 @@ export default function Home() {
               color: '#006847'
             }}
           >
-            Resultado final: {match.home_team} {match.home_score} -{' '}
-            {match.away_score} {match.away_team}
+            Resultado final: {getTeamFlag(match.home_team)} {match.home_team}{' '}
+            {match.home_score} - {match.away_score}{' '}
+            {getTeamFlag(match.away_team)} {match.away_team}
           </div>
         )}
 
@@ -1991,7 +2124,7 @@ export default function Home() {
                 margin: '15px auto 10px'
               }}
             >
-              <span>{match.home_team}</span>
+              <span>{renderTeamName(match.home_team)}</span>
 
               <input
                 type="number"
@@ -2014,7 +2147,7 @@ export default function Home() {
                 }
               />
 
-              <span>{match.away_team}</span>
+              <span>{renderTeamName(match.away_team)}</span>
 
               <input
                 type="number"
