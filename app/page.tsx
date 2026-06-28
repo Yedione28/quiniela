@@ -62,6 +62,7 @@ type AdminMatchPrediction = {
   kickoff: string
   predicted_home: number | null
   predicted_away: number | null
+  predicted_advancing_team: string | null
   created_at: string | null
 }
 
@@ -142,8 +143,8 @@ const TEAM_FLAGS: Record<string, string> = {
   ecuador: '🇪🇨',
   egipto: '🇪🇬',
   egypt: '🇪🇬',
-  england: '🏴',
-  inglaterra: '🏴',
+  england: '🇬🇧',
+  inglaterra: '🇬🇧',
   españa: '🇪🇸',
   espana: '🇪🇸',
   spain: '🇪🇸',
@@ -250,7 +251,7 @@ export default function Home() {
   const [adminPinInput, setAdminPinInput] = useState('')
 
   const [predictions, setPredictions] = useState<
-    Record<number, { home: string; away: string }>
+    Record<number, { home: string; away: string; advancing: string }>
   >({})
 
   const [resultInputs, setResultInputs] = useState<
@@ -377,12 +378,16 @@ export default function Home() {
       return
     }
 
-    const loaded: Record<number, { home: string; away: string }> = {}
+    const loaded: Record<
+      number,
+      { home: string; away: string; advancing: string }
+    > = {}
 
     ;(data || []).forEach((prediction: any) => {
       loaded[prediction.match_id] = {
         home: String(prediction.predicted_home),
-        away: String(prediction.predicted_away)
+        away: String(prediction.predicted_away),
+        advancing: prediction.predicted_advancing_team || ''
       }
     })
 
@@ -545,6 +550,52 @@ export default function Home() {
     return ''
   }
 
+  function updatePredictionScore(
+    matchId: number,
+    side: 'home' | 'away',
+    value: string
+  ) {
+    setPredictions((previous) => {
+      const current = previous[matchId] || {
+        home: '',
+        away: '',
+        advancing: ''
+      }
+
+      const next = {
+        ...current,
+        [side]: value
+      }
+
+      if (
+        next.home !== '' &&
+        next.away !== '' &&
+        Number(next.home) !== Number(next.away)
+      ) {
+        next.advancing = ''
+      }
+
+      return {
+        ...previous,
+        [matchId]: next
+      }
+    })
+  }
+
+  function updatePredictionAdvancing(matchId: number, advancing: string) {
+    setPredictions((previous) => ({
+      ...previous,
+      [matchId]: {
+        ...(previous[matchId] || {
+          home: '',
+          away: '',
+          advancing: ''
+        }),
+        advancing
+      }
+    }))
+  }
+
   async function savePrediction(match: Match) {
     if (!currentParticipant) {
       alert('Debes entrar con tu nombre y PIN')
@@ -563,12 +614,23 @@ export default function Home() {
       return
     }
 
+    const predictionIsDraw =
+      Number(prediction.home) === Number(prediction.away)
+
+    if (predictionIsDraw && prediction.advancing === '') {
+      alert(
+        'Como pronosticaste un empate tras 90 minutos, selecciona el equipo que avanza.'
+      )
+      return
+    }
+
     const { error } = await supabase.rpc('save_prediction_by_pin', {
       p_user_id: currentParticipant.id,
       p_pin_code: participantPin,
       p_match_id: match.id,
       p_home: Number(prediction.home),
-      p_away: Number(prediction.away)
+      p_away: Number(prediction.away),
+      p_advancing_team: predictionIsDraw ? prediction.advancing : null
     })
 
     if (error) {
@@ -898,6 +960,12 @@ export default function Home() {
 
     const predictionHome = getInputValue(predictions, match, 'home')
     const predictionAway = getInputValue(predictions, match, 'away')
+    const predictionAdvancing = predictions[match.id]?.advancing || ''
+
+    const predictionIsDraw =
+      predictionHome !== '' &&
+      predictionAway !== '' &&
+      Number(predictionHome) === Number(predictionAway)
 
     const resultHome = getInputValue(
       resultInputs,
@@ -984,13 +1052,7 @@ export default function Home() {
               value={predictionHome}
               disabled={!confirmed || locked || !currentParticipant}
               onChange={(e) =>
-                setPredictions({
-                  ...predictions,
-                  [match.id]: {
-                    home: e.target.value,
-                    away: predictionAway
-                  }
-                })
+                updatePredictionScore(match.id, 'home', e.target.value)
               }
               style={scoreInputStyle(!confirmed || locked || !currentParticipant)}
             />
@@ -1005,17 +1067,69 @@ export default function Home() {
               value={predictionAway}
               disabled={!confirmed || locked || !currentParticipant}
               onChange={(e) =>
-                setPredictions({
-                  ...predictions,
-                  [match.id]: {
-                    home: predictionHome,
-                    away: e.target.value
-                  }
-                })
+                updatePredictionScore(match.id, 'away', e.target.value)
               }
               style={scoreInputStyle(!confirmed || locked || !currentParticipant)}
             />
           </div>
+
+          {confirmed && predictionIsDraw && (
+            <div
+              style={{
+                marginTop: '10px',
+                padding: '9px',
+                borderRadius: '9px',
+                background: '#fff7e6',
+                border: '1px solid #efd29a'
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 'bold',
+                  color: '#7a4d00',
+                  marginBottom: '6px'
+                }}
+              >
+                Si empatan tras 90 minutos, ¿quién avanza?
+              </div>
+
+              {locked ? (
+                <div style={{ fontSize: '0.8rem', color: '#555' }}>
+                  {predictionAdvancing
+                    ? `Avanza pronosticado: ${getTeamFlag(
+                        predictionAdvancing
+                      )} ${displayTeamName(predictionAdvancing)}`
+                    : 'No se guardó un equipo que avanza.'}
+                </div>
+              ) : (
+                <select
+                  value={predictionAdvancing}
+                  disabled={!currentParticipant}
+                  onChange={(e) =>
+                    updatePredictionAdvancing(match.id, e.target.value)
+                  }
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '7px',
+                    border: '1px solid #d4b26a',
+                    background: currentParticipant ? 'white' : '#eeeeee'
+                  }}
+                >
+                  <option value="">Selecciona el equipo que avanza</option>
+                  <option value={match.home_team}>
+                    {getTeamFlag(match.home_team)}{' '}
+                    {displayTeamName(match.home_team)}
+                  </option>
+                  <option value={match.away_team}>
+                    {getTeamFlag(match.away_team)}{' '}
+                    {displayTeamName(match.away_team)}
+                  </option>
+                </select>
+              )}
+            </div>
+          )}
 
           <div
             style={{
@@ -1051,7 +1165,7 @@ export default function Home() {
                 textAlign: 'center'
               }}
             >
-              Resultado: <strong>{match.home_score} - {match.away_score}</strong>
+              Marcador 90': <strong>{match.home_score} - {match.away_score}</strong>
               <br />
               Avanza: <strong>{getTeamFlag(match.winner_team)} {displayTeamName(match.winner_team)}</strong>
             </div>
@@ -1096,8 +1210,19 @@ export default function Home() {
                   color: '#8a5600'
                 }}
               >
-                🛠️ Capturar resultado
+                🛠️ Capturar resultado (marcador al minuto 90)
               </summary>
+
+              <p
+                style={{
+                  margin: '8px 0 0',
+                  color: '#666',
+                  fontSize: '0.74rem'
+                }}
+              >
+                Captura el marcador tras 90 minutos. Si empatan, selecciona quién
+                avanzó por tiempo extra o penales.
+              </p>
 
               <div
                 style={{
@@ -1160,7 +1285,9 @@ export default function Home() {
                     border: '1px solid #d4b26a'
                   }}
                 >
-                  <option value="">Selecciona ganador por penales</option>
+                  <option value="">
+                    Selecciona equipo que avanza (TE / penales)
+                  </option>
                   <option value={match.home_team}>
                     {getTeamFlag(match.home_team)} {displayTeamName(match.home_team)}
                   </option>
@@ -1311,8 +1438,8 @@ export default function Home() {
             maxWidth: '860px'
           }}
         >
-          Escribe tu pronóstico junto a cada selección. Al finalizar un partido,
-          el ganador aparecerá automáticamente en la siguiente ronda.
+          El marcador se pronostica al finalizar los 90 minutos. Si pronosticas
+          empate, elige también el equipo que avanzará por tiempo extra o penales.
         </p>
 
         {isAdmin && (
@@ -1329,9 +1456,9 @@ export default function Home() {
               fontSize: '0.9rem'
             }}
           >
-            <strong>Modo administrador:</strong> abre “Capturar resultado” en
-            cada partido. Si el marcador termina empatado, selecciona el ganador
-            por penales para que avance a la siguiente ronda.
+            <strong>Modo administrador:</strong> captura el marcador al minuto
+            90. Si hay empate, selecciona el equipo que avanzó por tiempo extra o
+            penales para moverlo a la siguiente ronda.
           </div>
         )}
 
@@ -1459,7 +1586,7 @@ export default function Home() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: '520px'
+                minWidth: '640px'
               }}
             >
               <thead>
@@ -1467,6 +1594,9 @@ export default function Home() {
                   <th style={tableHeadStyle}>Participante</th>
                   <th style={{ ...tableHeadStyle, textAlign: 'center' }}>
                     Pronóstico
+                  </th>
+                  <th style={{ ...tableHeadStyle, textAlign: 'center' }}>
+                    Avanza si empatan
                   </th>
                   <th style={{ ...tableHeadStyle, textAlign: 'center' }}>
                     Estado
@@ -1491,6 +1621,20 @@ export default function Home() {
                             ? `${entry.predicted_home} - ${entry.predicted_away}`
                             : '-'}
                         </strong>
+                      </td>
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          textAlign: 'center'
+                        }}
+                      >
+                        {entry.predicted_advancing_team
+                          ? `${getTeamFlag(
+                              entry.predicted_advancing_team
+                            )} ${displayTeamName(
+                              entry.predicted_advancing_team
+                            )}`
+                          : '—'}
                       </td>
                       <td
                         style={{
@@ -1526,7 +1670,7 @@ export default function Home() {
             fontSize: '0.9rem'
           }}
         >
-          Desempate: puntos, exactos y resultados acertados.
+          Desempate: puntos, marcadores exactos y resultados acertados.
         </p>
 
         {leaderboard.length === 0 ? (
