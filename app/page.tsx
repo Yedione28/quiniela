@@ -42,6 +42,12 @@ type LeaderboardEntry = {
   correct_results: number
 }
 
+type RoundLeaderboardEntry = LeaderboardEntry & {
+  round_name: RoundName
+  round_label: string
+  round_sort: number
+}
+
 type RankingMovementEntry = {
   id: string
   name: string
@@ -235,10 +241,19 @@ export default function Home() {
   const [matches, setMatches] = useState<Match[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [roundLeaderboard, setRoundLeaderboard] = useState<
+    RoundLeaderboardEntry[]
+  >([])
+  const [selectedRound, setSelectedRound] =
+    useState<RoundName>('round_of_32')
   const [movements, setMovements] = useState<RankingMovementEntry[]>([])
   const [adminMatchPredictions, setAdminMatchPredictions] = useState<
     AdminMatchPrediction[]
   >([])
+  const [adminReviewMatchId, setAdminReviewMatchId] = useState<number | null>(
+    null
+  )
+  const [adminReviewError, setAdminReviewError] = useState('')
 
   const [currentParticipant, setCurrentParticipant] =
     useState<CurrentParticipant | null>(null)
@@ -264,6 +279,7 @@ export default function Home() {
     loadMatches()
     loadParticipants()
     loadLeaderboard()
+    loadRoundLeaderboard()
     loadMovements()
 
     const savedParticipantId = localStorage.getItem('quiniela_participant_id')
@@ -293,6 +309,7 @@ export default function Home() {
     const intervalId = window.setInterval(() => {
       loadMatches()
       loadLeaderboard()
+      loadRoundLeaderboard()
       loadMovements()
 
       if (currentParticipant && participantPin) {
@@ -307,6 +324,64 @@ export default function Home() {
     return () => window.clearInterval(intervalId)
   }, [currentParticipant, participantPin, isAdmin, adminPin])
 
+  useEffect(() => {
+    if (!isAdmin) {
+      return
+    }
+
+    const reviewMatches = matches
+      .filter((match) => isMatchConfirmed(match))
+      .sort(
+        (a, b) =>
+          new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
+      )
+
+    if (reviewMatches.length === 0) {
+      setAdminReviewMatchId(null)
+      return
+    }
+
+    const hasSavedPrediction = (match: Match) =>
+      adminMatchPredictions.some(
+        (entry) =>
+          String(entry.match_id) === String(match.id) &&
+          entry.predicted_home !== null &&
+          entry.predicted_home !== undefined &&
+          entry.predicted_away !== null &&
+          entry.predicted_away !== undefined
+      )
+
+    const firstMatchWithPredictions = reviewMatches.find(hasSavedPrediction)
+
+    const now = new Date()
+    const activeOrNextMatch =
+      reviewMatches.find((match) => {
+        const kickoff = new Date(match.kickoff).getTime()
+        const sixHoursAgo = now.getTime() - 6 * 60 * 60 * 1000
+
+        return kickoff >= sixHoursAgo && kickoff <= now.getTime()
+      }) ||
+      reviewMatches.find(
+        (match) => new Date(match.kickoff).getTime() > now.getTime()
+      )
+
+    setAdminReviewMatchId((currentId) => {
+      const currentStillExists = reviewMatches.some(
+        (match) => String(match.id) === String(currentId)
+      )
+
+      if (currentStillExists) {
+        return currentId
+      }
+
+      return (
+        firstMatchWithPredictions?.id ||
+        activeOrNextMatch?.id ||
+        reviewMatches[0].id
+      )
+    })
+  }, [isAdmin, matches, adminMatchPredictions])
+
   const currentLeaderboardEntry = currentParticipant
     ? leaderboard.find((entry) => entry.id === currentParticipant.id)
     : null
@@ -314,6 +389,15 @@ export default function Home() {
   const savedPredictionCount = Object.values(predictions).filter(
     (prediction) => prediction.home !== '' && prediction.away !== ''
   ).length
+
+  const finalMatch = matches.find(
+    (match) =>
+      match.round_name === 'final' &&
+      match.status === 'finished' &&
+      !!match.winner_team
+  )
+
+  const tournamentIsFinished = !!finalMatch
 
   async function loadMatches() {
     const { data, error } = await supabase.from('matches').select('*')
@@ -352,6 +436,21 @@ export default function Home() {
     }
 
     setLeaderboard((data || []) as LeaderboardEntry[])
+  }
+
+  async function loadRoundLeaderboard() {
+    const { data, error } = await supabase
+      .from('round_leaderboard_view')
+      .select('*')
+      .order('round_sort', { ascending: true })
+      .order('position', { ascending: true })
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setRoundLeaderboard((data || []) as RoundLeaderboardEntry[])
   }
 
   async function loadMovements() {
@@ -404,9 +503,11 @@ export default function Home() {
 
     if (error) {
       console.error(error)
+      setAdminReviewError(error.message)
       return
     }
 
+    setAdminReviewError('')
     setAdminMatchPredictions((data || []) as AdminMatchPrediction[])
   }
 
@@ -512,6 +613,8 @@ export default function Home() {
     setResultInputs({})
     setWinnerInputs({})
     setAdminMatchPredictions([])
+    setAdminReviewMatchId(null)
+    setAdminReviewError('')
     localStorage.removeItem('quiniela_admin_pin')
   }
 
@@ -886,14 +989,22 @@ export default function Home() {
           Llaves
         </a>
         <a href="#tabla" style={navLinkStyle}>
-          Tabla
+          Tabla general
         </a>
+        <a href="#por-ronda" style={navLinkStyle}>
+          Por ronda
+        </a>
+        {tournamentIsFinished && (
+          <a href="#campeones" style={navLinkStyle}>
+            Campeones
+          </a>
+        )}
         <a href="#movimiento" style={navLinkStyle}>
           Movimiento
         </a>
         {isAdmin && (
           <a href="#admin-en-curso" style={navLinkStyle}>
-            Admin: En curso
+            Admin: Pronósticos
           </a>
         )}
       </nav>
@@ -1503,45 +1614,33 @@ export default function Home() {
       return null
     }
 
-    const now = new Date()
-
-    const confirmedOpenMatches = matches
-      .filter(
-        (match) =>
-          isMatchConfirmed(match) &&
-          match.status !== 'finished'
-      )
+    const reviewMatches = matches
+      .filter((match) => isMatchConfirmed(match))
       .sort(
         (a, b) =>
           new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
       )
 
-    const currentMatch =
-      confirmedOpenMatches.find((match) => {
-        const kickoffTime = new Date(match.kickoff).getTime()
-        const sixHoursAgo = now.getTime() - 6 * 60 * 60 * 1000
-
-        return kickoffTime >= sixHoursAgo && kickoffTime <= now.getTime()
-      }) ||
-      confirmedOpenMatches.find(
-        (match) => new Date(match.kickoff).getTime() > now.getTime()
-      )
-
-    if (!currentMatch) {
+    if (reviewMatches.length === 0) {
       return (
         <section id="admin-en-curso" style={secondarySectionStyle}>
           <h2 style={{ marginTop: 0, textAlign: 'center' }}>
-            🛠️ Admin: Pronósticos en curso
+            🛠️ Admin: Revisión de pronósticos
           </h2>
           <p style={{ marginBottom: 0, color: '#777', textAlign: 'center' }}>
-            No hay un partido confirmado disponible.
+            No hay partidos confirmados disponibles.
           </p>
         </section>
       )
     }
 
+    const selectedMatch =
+      reviewMatches.find(
+        (match) => String(match.id) === String(adminReviewMatchId)
+      ) || reviewMatches[0]
+
     const currentEntries = adminMatchPredictions.filter(
-      (entry) => entry.match_id === currentMatch.id
+      (entry) => String(entry.match_id) === String(selectedMatch.id)
     )
 
     const savedCount = currentEntries.filter(
@@ -1555,8 +1654,61 @@ export default function Home() {
     return (
       <section id="admin-en-curso" style={secondarySectionStyle}>
         <h2 style={{ marginTop: 0, textAlign: 'center' }}>
-          🛠️ Admin: Pronósticos en curso
+          🛠️ Admin: Revisión de pronósticos
         </h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#666',
+            margin: '8px auto 14px',
+            maxWidth: '760px'
+          }}
+        >
+          Selecciona cualquier partido confirmado para revisar todos los
+          pronósticos guardados. Por defecto se abre el primero que ya tenga
+          pronósticos.
+        </p>
+
+        {adminReviewError && (
+          <div
+            style={{
+              margin: '0 auto 14px',
+              maxWidth: '760px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              color: '#9b1c1c',
+              background: '#fff0f0',
+              border: '1px solid #f0b4b4',
+              textAlign: 'center'
+            }}
+          >
+            No se pudieron cargar los pronósticos: {adminReviewError}
+          </div>
+        )}
+
+        <select
+          value={String(selectedMatch.id)}
+          onChange={(event) => setAdminReviewMatchId(Number(event.target.value))}
+          style={{
+            display: 'block',
+            width: 'min(100%, 720px)',
+            margin: '0 auto 15px',
+            padding: '10px',
+            borderRadius: '9px',
+            border: '1px solid #cfcfcf',
+            background: 'white',
+            color: '#222'
+          }}
+        >
+          {reviewMatches.map((match) => (
+            <option key={match.id} value={match.id}>
+              {getTeamFlag(match.home_team)} {displayTeamName(match.home_team)} vs{' '}
+              {getTeamFlag(match.away_team)} {displayTeamName(match.away_team)} ·{' '}
+              {formatMatchDate(match.kickoff)}
+            </option>
+          ))}
+        </select>
 
         <p
           style={{
@@ -1565,20 +1717,21 @@ export default function Home() {
             margin: '8px 0 18px'
           }}
         >
-          {getTeamFlag(currentMatch.home_team)}{' '}
-          <strong>{displayTeamName(currentMatch.home_team)}</strong> vs{' '}
-          {getTeamFlag(currentMatch.away_team)}{' '}
-          <strong>{displayTeamName(currentMatch.away_team)}</strong>
+          {getTeamFlag(selectedMatch.home_team)}{' '}
+          <strong>{displayTeamName(selectedMatch.home_team)}</strong> vs{' '}
+          {getTeamFlag(selectedMatch.away_team)}{' '}
+          <strong>{displayTeamName(selectedMatch.away_team)}</strong>
           <br />
           <small>
-            {formatMatchDate(currentMatch.kickoff)} · {savedCount}/
+            {formatMatchDate(selectedMatch.kickoff)} · {savedCount}/
             {currentEntries.length} guardados
           </small>
         </p>
 
         {currentEntries.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#777', marginBottom: 0 }}>
-            Aún no hay registros para mostrar.
+            Este partido aún no tiene filas de revisión. Cierra y vuelve a
+            entrar como admin, o revisa el mensaje de error arriba.
           </p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -1736,6 +1889,209 @@ export default function Home() {
             })}
           </div>
         )}
+      </section>
+    )
+  }
+
+  function renderRoundLeaderboard() {
+    const entries = roundLeaderboard.filter(
+      (entry) => entry.round_name === selectedRound
+    )
+
+    return (
+      <section id="por-ronda" style={secondarySectionStyle}>
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+          🗂️ Tabla por Ronda
+        </h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#777',
+            margin: '8px 0 16px'
+          }}
+        >
+          Muestra únicamente los puntos obtenidos en la ronda seleccionada.
+        </p>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            marginBottom: '18px'
+          }}
+        >
+          {ROUND_ORDER.map((round) => (
+            <button
+              key={round}
+              onClick={() => setSelectedRound(round)}
+              style={{
+                padding: '9px 12px',
+                border: 'none',
+                borderRadius: '999px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                background: selectedRound === round ? '#006847' : '#eeeeee',
+                color: selectedRound === round ? 'white' : '#333'
+              }}
+            >
+              {ROUND_LABELS[round]}
+            </button>
+          ))}
+        </div>
+
+        {entries.length === 0 ? (
+          <p style={{ marginBottom: 0, textAlign: 'center', color: '#777' }}>
+            Esta tabla aparecerá después de ejecutar la actualización de base de
+            datos.
+          </p>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '12px'
+            }}
+          >
+            {entries.map((entry, index) => {
+              const medal =
+                index === 0
+                  ? '🥇'
+                  : index === 1
+                    ? '🥈'
+                    : index === 2
+                      ? '🥉'
+                      : `#${entry.position}`
+
+              const isCurrent = currentParticipant?.id === entry.id
+
+              return (
+                <div
+                  key={`${entry.round_name}-${entry.id}`}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '45px 1fr auto',
+                    gap: '8px',
+                    alignItems: 'center',
+                    padding: '13px',
+                    borderRadius: '14px',
+                    border: '1px solid #eee',
+                    background: isCurrent ? '#e9f8ef' : '#fafafa'
+                  }}
+                >
+                  <strong>{medal}</strong>
+
+                  <div>
+                    <strong>
+                      {entry.name}
+                      {isCurrent ? ' 👈 Tú' : ''}
+                    </strong>
+                    <div
+                      style={{
+                        fontSize: '0.76rem',
+                        color: '#777',
+                        marginTop: '3px'
+                      }}
+                    >
+                      Exactos: {entry.exact_scores} · Acertados:{' '}
+                      {entry.correct_results}
+                    </div>
+                  </div>
+
+                  <strong>{entry.total_points} pts</strong>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  function renderChampionBadges() {
+    if (!finalMatch || leaderboard.length === 0) {
+      return null
+    }
+
+    const quinielaWinner = leaderboard[0]
+    const maxExactScores = Math.max(
+      ...leaderboard.map((entry) => entry.exact_scores)
+    )
+    const exactScoreLeaders =
+      maxExactScores > 0
+        ? leaderboard.filter(
+            (entry) => entry.exact_scores === maxExactScores
+          )
+        : []
+
+    return (
+      <section id="campeones" style={secondarySectionStyle}>
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+          🏆 Campeones de la Quiniela
+        </h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#777',
+            margin: '8px 0 18px'
+          }}
+        >
+          La Final ya terminó. Estos son los reconocimientos del torneo.
+        </p>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gap: '14px'
+          }}
+        >
+          <div style={championCardStyle}>
+            <div style={{ fontSize: '2rem' }}>
+              {getTeamFlag(finalMatch.winner_team)}
+            </div>
+            <div style={{ color: '#777', fontSize: '0.8rem' }}>
+              Campeón del Mundial
+            </div>
+            <strong style={{ fontSize: '1.25rem', color: '#006847' }}>
+              {displayTeamName(finalMatch.winner_team)}
+            </strong>
+          </div>
+
+          <div style={championCardStyle}>
+            <div style={{ fontSize: '2rem' }}>🥇</div>
+            <div style={{ color: '#777', fontSize: '0.8rem' }}>
+              Ganador de la Quiniela
+            </div>
+            <strong style={{ fontSize: '1.25rem', color: '#006847' }}>
+              {quinielaWinner.name}
+            </strong>
+            <small style={{ color: '#666' }}>
+              {quinielaWinner.total_points} puntos
+            </small>
+          </div>
+
+          <div style={championCardStyle}>
+            <div style={{ fontSize: '2rem' }}>🎯</div>
+            <div style={{ color: '#777', fontSize: '0.8rem' }}>
+              Más marcadores exactos
+            </div>
+            <strong style={{ fontSize: '1.05rem', color: '#006847' }}>
+              {exactScoreLeaders.length > 0
+                ? exactScoreLeaders.map((entry) => entry.name).join(', ')
+                : 'Sin marcadores exactos'}
+            </strong>
+            {exactScoreLeaders.length > 0 && (
+              <small style={{ color: '#666' }}>
+                {maxExactScores} marcador{maxExactScores === 1 ? '' : 'es'}{' '}
+                exacto{maxExactScores === 1 ? '' : 's'}
+              </small>
+            )}
+          </div>
+        </div>
       </section>
     )
   }
@@ -1907,8 +2263,10 @@ export default function Home() {
         {renderNavBar()}
         {renderProfileSummary()}
         {renderKnockoutBracket()}
-        {renderAdminCurrentMatchPredictions()}
         {renderLeaderboard()}
+        {renderRoundLeaderboard()}
+        {renderChampionBadges()}
+        {renderAdminCurrentMatchPredictions()}
         {renderMovement()}
 
         <footer
@@ -2016,6 +2374,18 @@ const secondarySectionStyle = {
   marginBottom: '25px',
   scrollMarginTop: '90px'
 } as const
+
+const championCardStyle = {
+  display: 'flex',
+  flexDirection: 'column' as const,
+  alignItems: 'center',
+  gap: '7px',
+  textAlign: 'center' as const,
+  padding: '20px',
+  borderRadius: '16px',
+  background: '#fafafa',
+  border: '1px solid #e6e6e6'
+}
 
 const tableHeadStyle = {
   padding: '9px',
