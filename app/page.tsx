@@ -3,14 +3,24 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+type RoundName =
+  | 'round_of_32'
+  | 'round_of_16'
+  | 'quarterfinal'
+  | 'semifinal'
+  | 'final'
+
 type Match = {
   id: number
   home_team: string
   away_team: string
   kickoff: string
-  status?: string
+  status?: string | null
   home_score?: number | null
   away_score?: number | null
+  round_name?: RoundName | null
+  bracket_order?: number | null
+  winner_team?: string | null
 }
 
 type Participant = {
@@ -44,25 +54,6 @@ type RankingMovementEntry = {
   correct_results: number
 }
 
-type MatchGroup = {
-  dateKey: string
-  dateLabel: string
-  matches: Match[]
-}
-
-type ChampionPrediction = {
-  team_name: string
-  created_at: string
-}
-
-type AdminChampionPrediction = {
-  user_id: string
-  participant_name: string
-  team_name: string | null
-  created_at: string | null
-  has_prediction: boolean
-}
-
 type AdminMatchPrediction = {
   participant_name: string
   match_id: number
@@ -74,19 +65,57 @@ type AdminMatchPrediction = {
   created_at: string | null
 }
 
-type LivePredictionEntry = {
-  match_id: number
-  home_team: string
-  away_team: string
-  kickoff: string
-  participant_name: string
-  predicted_home: number | null
-  predicted_away: number | null
-  has_prediction: boolean
-}
-
 const APP_TIME_ZONE = 'America/Mexico_City'
 
+const ROUND_ORDER: RoundName[] = [
+  'round_of_32',
+  'round_of_16',
+  'quarterfinal',
+  'semifinal',
+  'final'
+]
+
+const ROUND_LABELS: Record<RoundName, string> = {
+  round_of_32: 'Dieciseisavos de final',
+  round_of_16: 'Octavos de final',
+  quarterfinal: 'Cuartos de final',
+  semifinal: 'Semifinales',
+  final: 'Final'
+}
+
+const TEAM_TRANSLATIONS: Record<string, string> = {
+  algeria: 'Argelia',
+  australia: 'Australia',
+  austria: 'Austria',
+  belgium: 'Bélgica',
+  'bosnia and herzegovina': 'Bosnia y Herzegovina',
+  brazil: 'Brasil',
+  canada: 'Canadá',
+  'cape verde': 'Cabo Verde',
+  colombia: 'Colombia',
+  croatia: 'Croacia',
+  'dr congo': 'RD Congo',
+  ecuador: 'Ecuador',
+  egypt: 'Egipto',
+  england: 'Inglaterra',
+  france: 'Francia',
+  germany: 'Alemania',
+  ghana: 'Ghana',
+  'ivory coast': 'Costa de Marfil',
+  japan: 'Japón',
+  mexico: 'México',
+  morocco: 'Marruecos',
+  netherlands: 'Países Bajos',
+  norway: 'Noruega',
+  paraguay: 'Paraguay',
+  portugal: 'Portugal',
+  senegal: 'Senegal',
+  'south africa': 'Sudáfrica',
+  spain: 'España',
+  sweden: 'Suecia',
+  switzerland: 'Suiza',
+  'united states': 'Estados Unidos'
+}
 
 const TEAM_FLAGS: Record<string, string> = {
   algeria: '🇩🇿',
@@ -96,85 +125,57 @@ const TEAM_FLAGS: Record<string, string> = {
   austria: '🇦🇹',
   belgica: '🇧🇪',
   belgium: '🇧🇪',
-  bolivia: '🇧🇴',
-  bosnia: '🇧🇦',
   'bosnia and herzegovina': '🇧🇦',
+  'bosnia y herzegovina': '🇧🇦',
   brasil: '🇧🇷',
   brazil: '🇧🇷',
-  cameron: '🇨🇲',
-  cameroon: '🇨🇲',
   canada: '🇨🇦',
   'cape verde': '🇨🇻',
   'cabo verde': '🇨🇻',
-  chile: '🇨🇱',
   colombia: '🇨🇴',
   croacia: '🇭🇷',
   croatia: '🇭🇷',
-  curacao: '🇨🇼',
   'costa de marfil': '🇨🇮',
   'ivory coast': '🇨🇮',
-  'cote divoire': '🇨🇮',
-  dinamarca: '🇩🇰',
   'dr congo': '🇨🇩',
-  'democratic republic of the congo': '🇨🇩',
+  'rd congo': '🇨🇩',
   ecuador: '🇪🇨',
   egipto: '🇪🇬',
   egypt: '🇪🇬',
   england: '🏴',
-  escocia: '🏴',
+  inglaterra: '🏴',
+  españa: '🇪🇸',
   espana: '🇪🇸',
   spain: '🇪🇸',
   'estados unidos': '🇺🇸',
-  france: '🇫🇷',
+  'united states': '🇺🇸',
   francia: '🇫🇷',
+  france: '🇫🇷',
   ghana: '🇬🇭',
   germany: '🇩🇪',
-  haiti: '🇭🇹',
-  'iran': '🇮🇷',
-  iraq: '🇮🇶',
-  italia: '🇮🇹',
-  italy: '🇮🇹',
   japon: '🇯🇵',
+  'japón': '🇯🇵',
   japan: '🇯🇵',
-  jordania: '🇯🇴',
-  jordan: '🇯🇴',
-  'korea del sur': '🇰🇷',
-  'south korea': '🇰🇷',
   marruecos: '🇲🇦',
-  mexico: '🇲🇽',
   morocco: '🇲🇦',
-  'nueva zelanda': '🇳🇿',
-  'new zealand': '🇳🇿',
+  mexico: '🇲🇽',
+  'méxico': '🇲🇽',
   netherlands: '🇳🇱',
+  'países bajos': '🇳🇱',
+  'paises bajos': '🇳🇱',
   noruega: '🇳🇴',
   norway: '🇳🇴',
-  'paises bajos': '🇳🇱',
-  panama: '🇵🇦',
   paraguay: '🇵🇾',
-  peru: '🇵🇪',
-  poland: '🇵🇱',
-  polonia: '🇵🇱',
   portugal: '🇵🇹',
-  qatar: '🇶🇦',
-  'arabia saudita': '🇸🇦',
-  'saudi arabia': '🇸🇦',
   senegal: '🇸🇳',
-  serbia: '🇷🇸',
-  'sudafrica': '🇿🇦',
+  south_africa: '🇿🇦',
   'south africa': '🇿🇦',
+  sudafrica: '🇿🇦',
+  'sudáfrica': '🇿🇦',
   suecia: '🇸🇪',
   sweden: '🇸🇪',
   suiza: '🇨🇭',
-  switzerland: '🇨🇭',
-  tunez: '🇹🇳',
-  tunisia: '🇹🇳',
-  turquia: '🇹🇷',
-  turkey: '🇹🇷',
-  uruguay: '🇺🇾',
-  usa: '🇺🇸',
-  'united states': '🇺🇸',
-  uzbekistan: '🇺🇿',
-  venezuela: '🇻🇪'
+  switzerland: '🇨🇭'
 }
 
 function normalizeTeamName(team: string) {
@@ -183,38 +184,50 @@ function normalizeTeamName(team: string) {
     .toLocaleLowerCase('es-MX')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[.'’]/g, '')
     .replace(/\s+/g, ' ')
 }
 
-function getTeamFlag(team: string) {
-  return TEAM_FLAGS[normalizeTeamName(team)] || '🏳️'
+function isPlaceholderTeam(team: string | null | undefined) {
+  return !team || normalizeTeamName(team).startsWith('por definir')
 }
 
-function renderTeamName(team: string) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-        justifyContent: 'center',
-        flexWrap: 'wrap'
-      }}
-    >
-      <span style={{ fontSize: '1.2rem' }}>{getTeamFlag(team)}</span>
-      <span>{team}</span>
-    </span>
-  )
+function displayTeamName(team: string | null | undefined) {
+  if (isPlaceholderTeam(team)) {
+    return 'Por definir'
+  }
+
+  const original = team || ''
+  return TEAM_TRANSLATIONS[normalizeTeamName(original)] || original
 }
 
-function renderMatchTitle(homeTeam: string, awayTeam: string) {
-  return (
-    <>
-      {getTeamFlag(homeTeam)} {homeTeam} <span style={{ color: '#777' }}>vs</span>{' '}
-      {getTeamFlag(awayTeam)} {awayTeam}
-    </>
-  )
+function getTeamFlag(team: string | null | undefined) {
+  if (isPlaceholderTeam(team)) {
+    return '🏆'
+  }
+
+  return TEAM_FLAGS[normalizeTeamName(team || '')] || '🏳️'
+}
+
+function formatMatchDate(kickoff: string) {
+  const date = new Date(kickoff)
+
+  const datePart = date.toLocaleDateString('es-MX', {
+    timeZone: APP_TIME_ZONE,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short'
+  })
+
+  const timePart = date
+    .toLocaleTimeString('en-US', {
+      timeZone: APP_TIME_ZONE,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+    .toLowerCase()
+
+  return `${datePart} · ${timePart}`
 }
 
 export default function Home() {
@@ -222,30 +235,12 @@ export default function Home() {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [movements, setMovements] = useState<RankingMovementEntry[]>([])
-
-  const [championInput, setChampionInput] = useState('')
-  const [championPrediction, setChampionPrediction] =
-    useState<ChampionPrediction | null>(null)
-
-  const [adminChampionPredictions, setAdminChampionPredictions] = useState<
-    AdminChampionPrediction[]
-  >([])
-
   const [adminMatchPredictions, setAdminMatchPredictions] = useState<
     AdminMatchPrediction[]
   >([])
 
-  const [adminParticipantSearch, setAdminParticipantSearch] = useState('')
-  const [adminMatchFilter, setAdminMatchFilter] = useState('all')
-  const [adminStatusFilter, setAdminStatusFilter] = useState('all')
-
-  const [livePredictions, setLivePredictions] = useState<LivePredictionEntry[]>(
-    []
-  )
-
   const [currentParticipant, setCurrentParticipant] =
     useState<CurrentParticipant | null>(null)
-
   const [participantPin, setParticipantPin] = useState('')
   const [selectedLoginName, setSelectedLoginName] = useState('')
   const [loginPinInput, setLoginPinInput] = useState('')
@@ -254,17 +249,15 @@ export default function Home() {
   const [adminPin, setAdminPin] = useState('')
   const [adminPinInput, setAdminPinInput] = useState('')
 
-  const [newMatchHome, setNewMatchHome] = useState('')
-  const [newMatchAway, setNewMatchAway] = useState('')
-  const [newMatchKickoff, setNewMatchKickoff] = useState('')
+  const [predictions, setPredictions] = useState<
+    Record<number, { home: string; away: string }>
+  >({})
 
   const [resultInputs, setResultInputs] = useState<
     Record<number, { home: string; away: string }>
   >({})
 
-  const [predictions, setPredictions] = useState<
-    Record<number, { home: string; away: string }>
-  >({})
+  const [winnerInputs, setWinnerInputs] = useState<Record<number, string>>({})
 
   useEffect(() => {
     loadMatches()
@@ -286,8 +279,6 @@ export default function Home() {
 
       setParticipantPin(savedParticipantPin)
       loadPredictionsForParticipant(savedParticipantId, savedParticipantPin)
-      loadChampionPrediction(savedParticipantId, savedParticipantPin)
-      loadLivePredictions(savedParticipantId, savedParticipantPin)
     }
 
     const savedAdminPin = localStorage.getItem('quiniela_admin_pin')
@@ -298,45 +289,22 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (!currentParticipant || !participantPin) {
-      return
-    }
-
-    loadLivePredictions(currentParticipant.id, participantPin)
-
     const intervalId = window.setInterval(() => {
-      loadLivePredictions(currentParticipant.id, participantPin)
+      loadMatches()
+      loadLeaderboard()
+      loadMovements()
+
+      if (currentParticipant && participantPin) {
+        loadPredictionsForParticipant(currentParticipant.id, participantPin)
+      }
+
+      if (isAdmin && adminPin) {
+        loadAdminMatchPredictions(adminPin)
+      }
     }, 60000)
 
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [currentParticipant, participantPin])
-
-  const openMatches = matches.filter(
-    (match) => new Date(match.kickoff) > new Date()
-  )
-
-  const closedMatches = matches.filter(
-    (match) => new Date(match.kickoff) <= new Date()
-  )
-
-  const openMatchGroups = groupMatchesByDate(openMatches)
-  const closedMatchGroups = groupMatchesByDate(closedMatches)
-
-  const wentUp = movements.filter(
-    (movement) => movement.movement_type === 'subio'
-  )
-
-  const wentDown = movements.filter(
-    (movement) => movement.movement_type === 'bajo'
-  )
-
-  const stayedSame = movements.filter(
-    (movement) =>
-      movement.movement_type === 'igual' ||
-      movement.movement_type === 'nuevo'
-  )
+    return () => window.clearInterval(intervalId)
+  }, [currentParticipant, participantPin, isAdmin, adminPin])
 
   const currentLeaderboardEntry = currentParticipant
     ? leaderboard.find((entry) => entry.id === currentParticipant.id)
@@ -346,48 +314,95 @@ export default function Home() {
     (prediction) => prediction.home !== '' && prediction.away !== ''
   ).length
 
-  function groupMatchesByDate(matchesToGroup: Match[]): MatchGroup[] {
-    const groups: Record<string, Match[]> = {}
+  async function loadMatches() {
+    const { data, error } = await supabase.from('matches').select('*')
 
-    matchesToGroup.forEach((match) => {
-      const date = new Date(match.kickoff)
+    if (error) {
+      console.error(error)
+      return
+    }
 
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: APP_TIME_ZONE,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(date)
+    setMatches((data || []) as Match[])
+  }
 
-      const year = parts.find((part) => part.type === 'year')?.value
-      const month = parts.find((part) => part.type === 'month')?.value
-      const day = parts.find((part) => part.type === 'day')?.value
+  async function loadParticipants() {
+    const { data, error } = await supabase
+      .from('leaderboard_view')
+      .select('id, name')
+      .order('name', { ascending: true })
 
-      const dateKey = `${year}-${month}-${day}`
+    if (error) {
+      console.error(error)
+      return
+    }
 
-      if (!groups[dateKey]) {
-        groups[dateKey] = []
-      }
+    setParticipants((data || []) as Participant[])
+  }
 
-      groups[dateKey].push(match)
+  async function loadLeaderboard() {
+    const { data, error } = await supabase
+      .from('leaderboard_view')
+      .select('*')
+      .order('position', { ascending: true })
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setLeaderboard((data || []) as LeaderboardEntry[])
+  }
+
+  async function loadMovements() {
+    const { data, error } = await supabase
+      .from('ranking_movement_view')
+      .select('*')
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setMovements((data || []) as RankingMovementEntry[])
+  }
+
+  async function loadPredictionsForParticipant(userId: string, pinCode: string) {
+    const { data, error } = await supabase.rpc('get_predictions_by_pin', {
+      p_user_id: userId,
+      p_pin_code: pinCode
     })
 
-    return Object.keys(groups)
-      .sort()
-      .map((dateKey) => {
-        const firstMatchDate = new Date(groups[dateKey][0].kickoff)
+    if (error) {
+      console.error(error)
+      return
+    }
 
-        return {
-          dateKey,
-          dateLabel: firstMatchDate.toLocaleDateString('es-MX', {
-            timeZone: APP_TIME_ZONE,
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long'
-          }),
-          matches: groups[dateKey]
-        }
-      })
+    const loaded: Record<number, { home: string; away: string }> = {}
+
+    ;(data || []).forEach((prediction: any) => {
+      loaded[prediction.match_id] = {
+        home: String(prediction.predicted_home),
+        away: String(prediction.predicted_away)
+      }
+    })
+
+    setPredictions(loaded)
+  }
+
+  async function loadAdminMatchPredictions(pinToUse: string) {
+    const { data, error } = await supabase.rpc(
+      'get_admin_all_match_predictions',
+      {
+        p_admin_pin: pinToUse
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setAdminMatchPredictions((data || []) as AdminMatchPrediction[])
   }
 
   async function loginWithPin() {
@@ -412,7 +427,10 @@ export default function Home() {
       return
     }
 
-    const loggedUser = data[0]
+    const loggedUser = data[0] as {
+      user_id: string
+      user_name: string
+    }
 
     setCurrentParticipant({
       id: loggedUser.user_id,
@@ -425,17 +443,11 @@ export default function Home() {
     localStorage.setItem('quiniela_participant_name', loggedUser.user_name)
     localStorage.setItem('quiniela_participant_pin', loginPinInput.trim())
 
-    setLoginPinInput('')
-
     loadPredictionsForParticipant(loggedUser.user_id, loginPinInput.trim())
-    loadChampionPrediction(loggedUser.user_id, loginPinInput.trim())
-    loadLivePredictions(loggedUser.user_id, loginPinInput.trim())
+    setLoginPinInput('')
   }
 
   function logoutParticipant() {
-    setChampionPrediction(null)
-    setChampionInput('')
-    setLivePredictions([])
     setCurrentParticipant(null)
     setParticipantPin('')
     setPredictions({})
@@ -459,6 +471,7 @@ export default function Home() {
     if (!data) {
       setIsAdmin(false)
       setAdminPin('')
+      setAdminMatchPredictions([])
       localStorage.removeItem('quiniela_admin_pin')
 
       if (showSuccess) {
@@ -471,8 +484,6 @@ export default function Home() {
     setIsAdmin(true)
     setAdminPin(pinToCheck)
     localStorage.setItem('quiniela_admin_pin', pinToCheck)
-
-    loadAdminChampionPredictions(pinToCheck)
     loadAdminMatchPredictions(pinToCheck)
 
     if (showSuccess) {
@@ -491,169 +502,61 @@ export default function Home() {
   }
 
   function logoutAdmin() {
-    setAdminChampionPredictions([])
-    setAdminMatchPredictions([])
-    setAdminParticipantSearch('')
-    setAdminMatchFilter('all')
-    setAdminStatusFilter('all')
     setIsAdmin(false)
     setAdminPin('')
+    setResultInputs({})
+    setWinnerInputs({})
+    setAdminMatchPredictions([])
     localStorage.removeItem('quiniela_admin_pin')
   }
 
-  async function loadParticipants() {
-    const { data, error } = await supabase
-      .from('leaderboard_view')
-      .select('id, name')
-      .order('name', { ascending: true })
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setParticipants(data || [])
-  }
-
-  async function loadPredictionsForParticipant(userId: string, pinCode: string) {
-    const { data, error } = await supabase.rpc('get_predictions_by_pin', {
-      p_user_id: userId,
-      p_pin_code: pinCode
-    })
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    const loaded: Record<number, { home: string; away: string }> = {}
-
-    data.forEach((prediction: any) => {
-      loaded[prediction.match_id] = {
-        home: String(prediction.predicted_home),
-        away: String(prediction.predicted_away)
-      }
-    })
-
-    setPredictions(loaded)
-  }
-
-  async function loadChampionPrediction(userId: string, pinCode: string) {
-    const { data, error } = await supabase.rpc(
-      'get_champion_prediction_by_pin',
-      {
-        p_user_id: userId,
-        p_pin_code: pinCode
-      }
+  function isMatchConfirmed(match: Match) {
+    return (
+      !isPlaceholderTeam(match.home_team) && !isPlaceholderTeam(match.away_team)
     )
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    if (data && data.length > 0) {
-      setChampionPrediction(data[0])
-      setChampionInput(data[0].team_name)
-    } else {
-      setChampionPrediction(null)
-      setChampionInput('')
-    }
   }
 
-  async function loadLivePredictions(userId: string, pinCode: string) {
-    const { data, error } = await supabase.rpc('get_live_predictions_by_pin', {
-      p_user_id: userId,
-      p_pin_code: pinCode
-    })
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setLivePredictions(data || [])
+  function isMatchLocked(match: Match) {
+    return match.status === 'finished' || new Date(match.kickoff) <= new Date()
   }
 
-  async function saveChampionPrediction() {
+  function getRoundMatches(round: RoundName) {
+    return matches
+      .filter((match) => match.round_name === round)
+      .sort((a, b) => (a.bracket_order || 0) - (b.bracket_order || 0))
+  }
+
+  function getInputValue(
+    source: Record<number, { home: string; away: string }>,
+    match: Match,
+    side: 'home' | 'away',
+    fallback?: number | null
+  ) {
+    const currentValue = source[match.id]?.[side]
+
+    if (currentValue !== undefined) {
+      return currentValue
+    }
+
+    if (fallback !== undefined && fallback !== null) {
+      return String(fallback)
+    }
+
+    return ''
+  }
+
+  async function savePrediction(match: Match) {
     if (!currentParticipant) {
       alert('Debes entrar con tu nombre y PIN')
       return
     }
 
-    if (championInput.trim() === '') {
-      alert('Escribe el nombre del equipo campeón')
+    if (!isMatchConfirmed(match) || isMatchLocked(match)) {
+      alert('Este partido no está disponible para pronósticos')
       return
     }
 
-    const confirmed = window.confirm(
-      'Solo puedes elegir un equipo campeón. Después de guardar esta respuesta, quedará bloqueada y no podrás cambiarla. ¿Confirmas tu elección?'
-    )
-
-    if (!confirmed) {
-      return
-    }
-
-    const { error } = await supabase.rpc('save_champion_prediction_by_pin', {
-      p_user_id: currentParticipant.id,
-      p_pin_code: participantPin,
-      p_team_name: championInput.trim()
-    })
-
-    if (error) {
-      console.error(error)
-      alert(`Error: ${error.message}`)
-      return
-    }
-
-    alert('✅ Campeón guardado. Esta elección ya quedó bloqueada.')
-
-    loadChampionPrediction(currentParticipant.id, participantPin)
-
-    if (isAdmin) {
-      loadAdminChampionPredictions(adminPin)
-    }
-  }
-
-  async function loadAdminChampionPredictions(pinToUse: string) {
-    const { data, error } = await supabase.rpc(
-      'get_admin_champion_predictions',
-      {
-        p_admin_pin: pinToUse
-      }
-    )
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setAdminChampionPredictions(data || [])
-  }
-
-  async function loadAdminMatchPredictions(pinToUse: string) {
-    const { data, error } = await supabase.rpc(
-      'get_admin_all_match_predictions',
-      {
-        p_admin_pin: pinToUse
-      }
-    )
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setAdminMatchPredictions(data || [])
-  }
-
-  async function savePrediction(matchId: number) {
-    if (!currentParticipant) {
-      alert('Debes entrar con tu nombre y PIN')
-      return
-    }
-
-    const prediction = predictions[matchId]
+    const prediction = predictions[match.id]
 
     if (!prediction || prediction.home === '' || prediction.away === '') {
       alert('Ingresa ambos marcadores')
@@ -663,7 +566,7 @@ export default function Home() {
     const { error } = await supabase.rpc('save_prediction_by_pin', {
       p_user_id: currentParticipant.id,
       p_pin_code: participantPin,
-      p_match_id: matchId,
+      p_match_id: match.id,
       p_home: Number(prediction.home),
       p_away: Number(prediction.away)
     })
@@ -677,88 +580,76 @@ export default function Home() {
     alert('✅ Pronóstico guardado')
     loadPredictionsForParticipant(currentParticipant.id, participantPin)
 
-    if (isAdmin) {
+    if (isAdmin && adminPin) {
       loadAdminMatchPredictions(adminPin)
     }
-
-    loadLivePredictions(currentParticipant.id, participantPin)
   }
 
-  async function addNewMatch() {
+  async function saveKnockoutResult(match: Match) {
     if (!isAdmin) {
       alert('No tienes permisos de administrador')
       return
     }
 
-    if (
-      newMatchHome.trim() === '' ||
-      newMatchAway.trim() === '' ||
-      newMatchKickoff === ''
-    ) {
-      alert('Completa equipo local, equipo visitante, fecha y hora')
+    if (!isMatchConfirmed(match)) {
+      alert('Todavía faltan equipos por confirmar en este partido')
       return
     }
 
-    const kickoffDate = new Date(newMatchKickoff)
-    const kickoffForDatabase = `${newMatchKickoff.replace('T', ' ')}:00`
+    const homeText = getInputValue(
+      resultInputs,
+      match,
+      'home',
+      match.home_score
+    )
+    const awayText = getInputValue(
+      resultInputs,
+      match,
+      'away',
+      match.away_score
+    )
 
-    if (Number.isNaN(kickoffDate.getTime())) {
-      alert('La fecha/hora no es válida')
-      return
-    }
-
-    const { error } = await supabase.rpc('admin_add_match_pin', {
-      p_admin_pin: adminPin,
-      p_home_team: newMatchHome.trim(),
-      p_away_team: newMatchAway.trim(),
-      p_kickoff: kickoffForDatabase
-    })
-
-    if (error) {
-      console.error(error)
-      alert(`Error: ${error.message}`)
-      return
-    }
-
-    alert('✅ Partido agregado')
-
-    setNewMatchHome('')
-    setNewMatchAway('')
-    setNewMatchKickoff('')
-
-    loadMatches()
-  }
-
-  async function saveFinalResult(match: Match) {
-    if (!isAdmin) {
-      alert('No tienes permisos de administrador')
-      return
-    }
-
-    const result = resultInputs[match.id]
-
-    const homeValue =
-      result?.home ??
-      (match.home_score !== null && match.home_score !== undefined
-        ? String(match.home_score)
-        : '')
-
-    const awayValue =
-      result?.away ??
-      (match.away_score !== null && match.away_score !== undefined
-        ? String(match.away_score)
-        : '')
-
-    if (homeValue === '' || awayValue === '') {
+    if (homeText === '' || awayText === '') {
       alert('Ingresa ambos marcadores finales')
       return
     }
 
-    const { error } = await supabase.rpc('admin_finish_match_pin', {
+    const homeScore = Number(homeText)
+    const awayScore = Number(awayText)
+
+    if (
+      Number.isNaN(homeScore) ||
+      Number.isNaN(awayScore) ||
+      homeScore < 0 ||
+      awayScore < 0
+    ) {
+      alert('Los marcadores no son válidos')
+      return
+    }
+
+    let advancingTeam = winnerInputs[match.id] || ''
+
+    if (homeScore > awayScore) {
+      advancingTeam = match.home_team
+    }
+
+    if (awayScore > homeScore) {
+      advancingTeam = match.away_team
+    }
+
+    if (homeScore === awayScore && advancingTeam === '') {
+      alert(
+        'El partido terminó empatado. Selecciona el equipo que avanzó por penales.'
+      )
+      return
+    }
+
+    const { error } = await supabase.rpc('admin_finish_knockout_match_pin', {
       p_admin_pin: adminPin,
       p_match_id: match.id,
-      p_home_score: Number(homeValue),
-      p_away_score: Number(awayValue)
+      p_home_score: homeScore,
+      p_away_score: awayScore,
+      p_winner_team: advancingTeam
     })
 
     if (error) {
@@ -767,62 +658,53 @@ export default function Home() {
       return
     }
 
-    alert('✅ Resultado guardado, puntos calculados y ranking actualizado')
+    alert('✅ Resultado guardado. El ganador avanzó automáticamente.')
 
     loadMatches()
     loadLeaderboard()
     loadMovements()
+    loadAdminMatchPredictions(adminPin)
 
     if (currentParticipant) {
-      loadLivePredictions(currentParticipant.id, participantPin)
+      loadPredictionsForParticipant(currentParticipant.id, participantPin)
     }
   }
 
-  async function loadMatches() {
-    const { data, error } = await supabase
-      .from('matches')
-      .select('*')
-      .order('kickoff', { ascending: true })
-
-    if (error) {
-      console.error(error)
-      return
+  function renderTeamLabel(team: string) {
+    if (isPlaceholderTeam(team)) {
+      return (
+        <span style={{ color: '#888', fontStyle: 'italic' }}>
+          🏆 Por definir
+        </span>
+      )
     }
 
-    setMatches(data || [])
-  }
-
-  async function loadLeaderboard() {
-    const { data, error } = await supabase
-      .from('leaderboard_view')
-      .select('*')
-      .order('position', { ascending: true })
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setLeaderboard(data || [])
-  }
-
-  async function loadMovements() {
-    const { data, error } = await supabase
-      .from('ranking_movement_view')
-      .select('*')
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setMovements(data || [])
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '7px',
+          minWidth: 0
+        }}
+      >
+        <span style={{ fontSize: '1.15rem' }}>{getTeamFlag(team)}</span>
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {displayTeamName(team)}
+        </span>
+      </span>
+    )
   }
 
   function renderLoginBox() {
     return (
       <div
-        className="login-box"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -832,37 +714,37 @@ export default function Home() {
         }}
       >
         {currentParticipant ? (
-          <div className="login-pill">
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.14)',
+              padding: '8px 10px',
+              borderRadius: '12px'
+            }}
+          >
             👤 {currentParticipant.name}
 
             <button
               onClick={logoutParticipant}
-              style={{
-                marginLeft: '10px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer'
-              }}
+              style={smallHeaderButtonStyle}
             >
               Salir
             </button>
           </div>
         ) : (
-          <div className="participant-login-card">
-            <span className="mobile-login-title">Entrar a la quiniela</span>
-
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end'
+            }}
+          >
             <select
               value={selectedLoginName}
               onChange={(e) => setSelectedLoginName(e.target.value)}
-              style={{
-                padding: '9px',
-                borderRadius: '8px',
-                border: 'none'
-              }}
+              style={headerInputStyle}
             >
               <option value="">Selecciona tu nombre</option>
-
               {participants.map((participant) => (
                 <option key={participant.id} value={participant.name}>
                   {participant.name}
@@ -875,72 +757,44 @@ export default function Home() {
               placeholder="PIN"
               value={loginPinInput}
               onChange={(e) => setLoginPinInput(e.target.value)}
-              style={{
-                width: '90px',
-                padding: '9px',
-                borderRadius: '8px',
-                border: 'none'
-              }}
+              style={{ ...headerInputStyle, width: '86px' }}
             />
 
-            <button
-              onClick={loginWithPin}
-              style={{
-                padding: '9px 13px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 'bold'
-              }}
-            >
+            <button onClick={loginWithPin} style={headerButtonStyle}>
               Entrar
             </button>
           </div>
         )}
 
         {isAdmin ? (
-          <div className="login-pill">
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.14)',
+              padding: '8px 10px',
+              borderRadius: '12px'
+            }}
+          >
             🛠️ Admin activo
 
             <button
               onClick={logoutAdmin}
-              style={{
-                marginLeft: '10px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer'
-              }}
+              style={smallHeaderButtonStyle}
             >
               Cerrar admin
             </button>
           </div>
         ) : (
-          <div className="admin-login-card">
+          <div style={{ display: 'flex', gap: '8px' }}>
             <input
               type="password"
               placeholder="PIN admin"
               value={adminPinInput}
               onChange={(e) => setAdminPinInput(e.target.value)}
-              style={{
-                width: '115px',
-                padding: '9px',
-                borderRadius: '8px',
-                border: 'none'
-              }}
+              style={{ ...headerInputStyle, width: '112px' }}
             />
 
-            <button
-              onClick={activateAdmin}
-              style={{
-                padding: '9px 13px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 'bold'
-              }}
-            >
-              Activar admin
+            <button onClick={activateAdmin} style={headerButtonStyle}>
+              Admin
             </button>
           </div>
         )}
@@ -950,1291 +804,853 @@ export default function Home() {
 
   function renderNavBar() {
     return (
-      <nav className="quick-nav">
-        <a href="#inicio">Inicio</a>
-
-        {currentParticipant && <a href="#mi-quiniela">Mi Quiniela</a>}
-
-        {currentParticipant && <a href="#campeon">Campeón</a>}
-
-        {currentParticipant && <a href="#predicciones-en-vivo">En curso</a>}
-
-        <a href="#partidos">Partidos</a>
-        <a href="#tabla">Tabla</a>
-
-        {isAdmin && <a href="#admin-pronosticos">Admin</a>}
-
-        <a href="#movimiento">Movimiento</a>
+      <nav
+        style={{
+          position: 'sticky',
+          top: '0',
+          zIndex: 10,
+          display: 'flex',
+          gap: '8px',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          marginBottom: '22px',
+          padding: '10px',
+          borderRadius: '14px',
+          background: 'rgba(0,0,0,0.14)',
+          backdropFilter: 'blur(6px)'
+        }}
+      >
+        <a href="#llaves" style={navLinkStyle}>
+          Llaves
+        </a>
+        <a href="#tabla" style={navLinkStyle}>
+          Tabla
+        </a>
+        <a href="#movimiento" style={navLinkStyle}>
+          Movimiento
+        </a>
+        {isAdmin && (
+          <a href="#admin-en-curso" style={navLinkStyle}>
+            Admin: En curso
+          </a>
+        )}
       </nav>
     )
   }
 
-  function renderMySummaryBox() {
+  function renderProfileSummary() {
     if (!currentParticipant) {
       return null
     }
 
-    const isTopThree =
-      currentLeaderboardEntry && currentLeaderboardEntry.position <= 3
-
     return (
       <section
-        id="mi-quiniela"
-        className="my-summary-card"
+        style={{
+          background: 'white',
+          color: '#222',
+          borderRadius: '20px',
+          padding: '18px',
+          marginBottom: '22px'
+        }}
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '12px',
+            alignItems: 'center'
+          }}
+        >
+          <div>
+            <div style={{ color: '#777', fontSize: '0.82rem' }}>
+              Participante
+            </div>
+            <strong style={{ fontSize: '1.15rem' }}>
+              👤 {currentParticipant.name}
+            </strong>
+          </div>
+
+          <SummaryStat
+            label="Posición"
+            value={
+              currentLeaderboardEntry
+                ? `#${currentLeaderboardEntry.position}`
+                : 'Sin posición'
+            }
+          />
+          <SummaryStat
+            label="Puntos"
+            value={currentLeaderboardEntry?.total_points || 0}
+          />
+          <SummaryStat
+            label="Pronósticos guardados"
+            value={savedPredictionCount}
+          />
+        </div>
+      </section>
+    )
+  }
+
+  function renderBracketMatch(match: Match) {
+    const confirmed = isMatchConfirmed(match)
+    const locked = isMatchLocked(match)
+    const finished = match.status === 'finished'
+
+    const predictionHome = getInputValue(predictions, match, 'home')
+    const predictionAway = getInputValue(predictions, match, 'away')
+
+    const resultHome = getInputValue(
+      resultInputs,
+      match,
+      'home',
+      match.home_score
+    )
+    const resultAway = getInputValue(
+      resultInputs,
+      match,
+      'away',
+      match.away_score
+    )
+
+    const resultHomeNumber = Number(resultHome)
+    const resultAwayNumber = Number(resultAway)
+
+    const isDrawInput =
+      resultHome !== '' &&
+      resultAway !== '' &&
+      !Number.isNaN(resultHomeNumber) &&
+      !Number.isNaN(resultAwayNumber) &&
+      resultHomeNumber === resultAwayNumber
+
+    const statusLabel = finished
+      ? '✅ Finalizado'
+      : confirmed && !locked
+        ? '🟢 Pronóstico abierto'
+        : confirmed
+          ? '🔒 Pronóstico cerrado'
+          : '⏳ Esperando ganadores'
+
+    const statusColor = finished
+      ? '#006847'
+      : confirmed && !locked
+        ? '#006847'
+        : confirmed
+          ? '#666'
+          : '#9a6700'
+
+    return (
+      <article
+        key={match.id}
+        style={{
+          width: '100%',
+          borderRadius: '14px',
+          border: finished ? '2px solid #b7dfc8' : '1px solid #dcdcdc',
+          background: finished ? '#f4fbf6' : 'white',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.08)',
+          overflow: 'hidden'
+        }}
+      >
+        <div
+          style={{
+            padding: '9px 11px',
+            background: '#f7f7f7',
+            borderBottom: '1px solid #e7e7e7'
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '8px',
+              alignItems: 'center',
+              fontSize: '0.75rem',
+              color: '#666'
+            }}
+          >
+            <strong style={{ color: '#333' }}>
+              Partido {match.bracket_order || '-'}
+            </strong>
+            <span>{formatMatchDate(match.kickoff)}</span>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 11px 11px' }}>
+          <div style={teamPredictionRowStyle}>
+            <strong style={{ minWidth: 0 }}>{renderTeamLabel(match.home_team)}</strong>
+            <input
+              aria-label={`Pronóstico ${displayTeamName(match.home_team)}`}
+              type="number"
+              min="0"
+              value={predictionHome}
+              disabled={!confirmed || locked || !currentParticipant}
+              onChange={(e) =>
+                setPredictions({
+                  ...predictions,
+                  [match.id]: {
+                    home: e.target.value,
+                    away: predictionAway
+                  }
+                })
+              }
+              style={scoreInputStyle(!confirmed || locked || !currentParticipant)}
+            />
+          </div>
+
+          <div style={{ ...teamPredictionRowStyle, paddingTop: '8px', borderTop: 'none' }}>
+            <strong style={{ minWidth: 0 }}>{renderTeamLabel(match.away_team)}</strong>
+            <input
+              aria-label={`Pronóstico ${displayTeamName(match.away_team)}`}
+              type="number"
+              min="0"
+              value={predictionAway}
+              disabled={!confirmed || locked || !currentParticipant}
+              onChange={(e) =>
+                setPredictions({
+                  ...predictions,
+                  [match.id]: {
+                    home: predictionHome,
+                    away: e.target.value
+                  }
+                })
+              }
+              style={scoreInputStyle(!confirmed || locked || !currentParticipant)}
+            />
+          </div>
+
+          <div
+            style={{
+              marginTop: '10px',
+              color: statusColor,
+              fontWeight: 'bold',
+              fontSize: '0.76rem',
+              textAlign: 'center'
+            }}
+          >
+            {statusLabel}
+          </div>
+
+          {!confirmed && (
+            <p
+              style={{
+                margin: '8px 0 0',
+                fontSize: '0.74rem',
+                color: '#777',
+                textAlign: 'center'
+              }}
+            >
+              Los ganadores aparecerán aquí automáticamente.
+            </p>
+          )}
+
+          {finished && (
+            <div
+              style={{
+                marginTop: '8px',
+                fontSize: '0.82rem',
+                color: '#444',
+                textAlign: 'center'
+              }}
+            >
+              Resultado: <strong>{match.home_score} - {match.away_score}</strong>
+              <br />
+              Avanza: <strong>{getTeamFlag(match.winner_team)} {displayTeamName(match.winner_team)}</strong>
+            </div>
+          )}
+
+          {confirmed && !locked && (
+            <button
+              onClick={() => savePrediction(match)}
+              disabled={!currentParticipant}
+              style={{
+                width: '100%',
+                marginTop: '11px',
+                padding: '9px',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: currentParticipant ? 'pointer' : 'not-allowed',
+                background: currentParticipant ? '#006847' : '#aaa',
+                color: 'white',
+                fontWeight: 'bold',
+                fontSize: '0.8rem'
+              }}
+            >
+              {currentParticipant
+                ? 'Guardar pronóstico'
+                : 'Entra para pronosticar'}
+            </button>
+          )}
+
+          {isAdmin && confirmed && (
+            <details
+              style={{
+                marginTop: '12px',
+                borderTop: '1px solid #e5d2a6',
+                paddingTop: '10px'
+              }}
+            >
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '0.8rem',
+                  color: '#8a5600'
+                }}
+              >
+                🛠️ Capturar resultado
+              </summary>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 48px',
+                  gap: '8px',
+                  alignItems: 'center',
+                  marginTop: '10px'
+                }}
+              >
+                <span>{renderTeamLabel(match.home_team)}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={resultHome}
+                  onChange={(e) =>
+                    setResultInputs({
+                      ...resultInputs,
+                      [match.id]: {
+                        home: e.target.value,
+                        away: resultAway
+                      }
+                    })
+                  }
+                  style={adminScoreInputStyle}
+                />
+
+                <span>{renderTeamLabel(match.away_team)}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={resultAway}
+                  onChange={(e) =>
+                    setResultInputs({
+                      ...resultInputs,
+                      [match.id]: {
+                        home: resultHome,
+                        away: e.target.value
+                      }
+                    })
+                  }
+                  style={adminScoreInputStyle}
+                />
+              </div>
+
+              {isDrawInput && (
+                <select
+                  value={winnerInputs[match.id] || match.winner_team || ''}
+                  onChange={(e) =>
+                    setWinnerInputs({
+                      ...winnerInputs,
+                      [match.id]: e.target.value
+                    })
+                  }
+                  style={{
+                    width: '100%',
+                    marginTop: '9px',
+                    padding: '8px',
+                    borderRadius: '7px',
+                    border: '1px solid #d4b26a'
+                  }}
+                >
+                  <option value="">Selecciona ganador por penales</option>
+                  <option value={match.home_team}>
+                    {getTeamFlag(match.home_team)} {displayTeamName(match.home_team)}
+                  </option>
+                  <option value={match.away_team}>
+                    {getTeamFlag(match.away_team)} {displayTeamName(match.away_team)}
+                  </option>
+                </select>
+              )}
+
+              {!isDrawInput &&
+                resultHome !== '' &&
+                resultAway !== '' &&
+                !Number.isNaN(resultHomeNumber) &&
+                !Number.isNaN(resultAwayNumber) && (
+                  <p
+                    style={{
+                      color: '#666',
+                      fontSize: '0.74rem',
+                      margin: '8px 0 0'
+                    }}
+                  >
+                    Avanza automáticamente:{' '}
+                    <strong>
+                      {displayTeamName(
+                        resultHomeNumber > resultAwayNumber
+                          ? match.home_team
+                          : match.away_team
+                      )}
+                    </strong>
+                  </p>
+                )}
+
+              <button
+                onClick={() => saveKnockoutResult(match)}
+                style={{
+                  width: '100%',
+                  marginTop: '10px',
+                  padding: '9px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  background: '#ce1126',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  fontSize: '0.8rem'
+                }}
+              >
+                Guardar y avanzar ganador
+              </button>
+            </details>
+          )}
+        </div>
+      </article>
+    )
+  }
+
+  function renderBracketColumn(round: RoundName) {
+    const roundMatches = getRoundMatches(round)
+
+    return (
+      <div
+        key={round}
+        style={{
+          minWidth: '248px',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '1660px',
+          padding: '0 4px'
+        }}
+      >
+        <div
+          style={{
+            position: 'sticky',
+            top: '12px',
+            zIndex: 2,
+            textAlign: 'center',
+            marginBottom: '10px',
+            padding: '10px',
+            borderRadius: '10px',
+            background:
+              round === 'final'
+                ? 'linear-gradient(135deg,#f7c948,#c89300)'
+                : '#006847',
+            color: 'white',
+            fontWeight: 'bold',
+            boxShadow: '0 3px 8px rgba(0,0,0,0.18)'
+          }}
+        >
+          {round === 'final' ? '🏆 ' : ''}
+          {ROUND_LABELS[round]}
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: round === 'final' ? 'center' : 'space-around',
+            gap: '16px'
+          }}
+        >
+          {roundMatches.length === 0 ? (
+            <p
+              style={{
+                textAlign: 'center',
+                color: '#777',
+                fontSize: '0.82rem'
+              }}
+            >
+              Sin partidos
+            </p>
+          ) : (
+            roundMatches.map((match) => renderBracketMatch(match))
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function renderKnockoutBracket() {
+    return (
+      <section
+        id="llaves"
         style={{
           background: 'white',
           color: '#222',
           borderRadius: '24px',
           padding: '24px',
           marginBottom: '25px',
-          border: isTopThree ? '3px solid #f7c948' : 'none',
           scrollMarginTop: '90px'
         }}
       >
-        <div
+        <h2
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 0.8fr) 1.2fr',
-            gap: '20px',
-            alignItems: 'center'
+            margin: 0,
+            textAlign: 'center',
+            fontSize: '1.8rem'
           }}
-          className="my-summary-grid"
         >
-          <div
-            style={{
-              borderRadius: '22px',
-              padding: '22px',
-              background: 'linear-gradient(135deg,#006847,#004d36)',
-              color: 'white',
-              textAlign: 'center'
-            }}
-          >
-            <div style={{ fontSize: '2.4rem', marginBottom: '8px' }}>👤</div>
-
-            <div style={{ opacity: 0.85, fontSize: '0.9rem' }}>
-              Participante
-            </div>
-
-            <h2 style={{ margin: '6px 0 14px' }}>
-              {currentParticipant.name}
-            </h2>
-
-            <div
-              style={{
-                display: 'inline-block',
-                padding: '8px 14px',
-                borderRadius: '999px',
-                background: 'rgba(255,255,255,0.16)',
-                fontWeight: 'bold'
-              }}
-            >
-              {currentLeaderboardEntry
-                ? `#${currentLeaderboardEntry.position}`
-                : 'Sin posición'}
-            </div>
-          </div>
-
-          <div
-            className="my-stat-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '12px'
-            }}
-          >
-            <div className="my-stat-card">
-              <span>Puntos</span>
-              <strong>
-                {currentLeaderboardEntry
-                  ? currentLeaderboardEntry.total_points
-                  : 0}
-              </strong>
-            </div>
-
-            <div className="my-stat-card">
-              <span>Pronósticos</span>
-              <strong>{savedPredictionCount}</strong>
-            </div>
-
-            <div className="my-stat-card">
-              <span>Exactos</span>
-              <strong>
-                {currentLeaderboardEntry
-                  ? currentLeaderboardEntry.exact_scores
-                  : 0}
-              </strong>
-            </div>
-
-            <div className="my-stat-card">
-              <span>Acertados</span>
-              <strong>
-                {currentLeaderboardEntry
-                  ? currentLeaderboardEntry.correct_results
-                  : 0}
-              </strong>
-            </div>
-
-            <div className="my-stat-card">
-              <span>Partidos abiertos</span>
-              <strong>{openMatches.length}</strong>
-            </div>
-
-            <div className="my-stat-card">
-              <span>Partidos cerrados</span>
-              <strong>{closedMatches.length}</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  function renderChampionPredictionBox() {
-    if (!currentParticipant) {
-      return null
-    }
-
-    const isLocked = !!championPrediction
-
-    return (
-      <section
-        id="campeon"
-        style={{
-          background: 'white',
-          color: '#222',
-          borderRadius: '20px',
-          padding: '22px',
-          marginBottom: '25px',
-          border: isLocked ? '2px solid #006847' : '2px solid #f7c948',
-          scrollMarginTop: '90px'
-        }}
-      >
-        <h2 style={{ marginBottom: '8px', textAlign: 'center' }}>
-          🏆 ¿Quién gana el Mundial?
+          🏆 Llaves de Eliminación Directa
         </h2>
 
         <p
           style={{
-            color: '#666',
             textAlign: 'center',
-            marginBottom: '16px'
-          }}
-        >
-          Solo puedes elegir un equipo. Después de guardar tu respuesta, quedará
-          bloqueada y no podrás cambiarla.
-        </p>
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '10px',
-            flexWrap: 'wrap'
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Ejemplo: México, Brasil, Argentina..."
-            value={championInput}
-            disabled={isLocked}
-            onChange={(e) => setChampionInput(e.target.value)}
-            style={{
-              width: '100%',
-              maxWidth: '360px',
-              padding: '11px',
-              borderRadius: '10px',
-              border: '1px solid #ccc',
-              background: isLocked ? '#f1f1f1' : 'white'
-            }}
-          />
-
-          <button
-            onClick={saveChampionPrediction}
-            disabled={isLocked}
-            style={{
-              padding: '11px 16px',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: isLocked ? 'not-allowed' : 'pointer',
-              background: isLocked ? '#999' : '#006847',
-              color: 'white',
-              fontWeight: 'bold'
-            }}
-          >
-            {isLocked ? '🔒 Elección bloqueada' : 'Guardar campeón'}
-          </button>
-        </div>
-
-        {isLocked && (
-          <p
-            style={{
-              textAlign: 'center',
-              marginTop: '14px',
-              color: '#006847',
-              fontWeight: 'bold'
-            }}
-          >
-            Tu campeón elegido: {championPrediction.team_name}
-          </p>
-        )}
-      </section>
-    )
-  }
-
-  function renderLivePredictionsBox() {
-    if (!currentParticipant) {
-      return null
-    }
-
-    const groupedMatches = Array.from(
-      new Map(
-        livePredictions.map((entry) => [
-          String(entry.match_id),
-          {
-            match_id: entry.match_id,
-            home_team: entry.home_team,
-            away_team: entry.away_team,
-            kickoff: entry.kickoff,
-            entries: livePredictions.filter(
-              (prediction) => prediction.match_id === entry.match_id
-            )
-          }
-        ])
-      ).values()
-    )
-
-    return (
-      <section
-        id="predicciones-en-vivo"
-        className="live-predictions-section"
-        style={{
-          background: 'white',
-          color: '#222',
-          borderRadius: '20px',
-          padding: '22px',
-          marginBottom: '25px',
-          border: '2px solid #006847',
-          scrollMarginTop: '90px'
-        }}
-      >
-        <h2 style={{ marginBottom: '8px', textAlign: 'center' }}>
-          👀 Pronósticos del partido actual / siguiente
-        </h2>
-
-        <p
-          style={{
             color: '#666',
-            textAlign: 'center',
-            marginBottom: '18px'
+            margin: '9px auto 18px',
+            maxWidth: '860px'
           }}
         >
-          Aquí puedes ver los pronósticos de todos para un solo partido: si hay
-          un partido en curso, se muestra ese; si no, se muestra el siguiente
-          partido pendiente. Los partidos terminados ya no aparecen aquí.
+          Escribe tu pronóstico junto a cada selección. Al finalizar un partido,
+          el ganador aparecerá automáticamente en la siguiente ronda.
         </p>
-
-        {groupedMatches.length === 0 ? (
-          <p
-            style={{
-              color: '#777',
-              textAlign: 'center',
-              margin: 0
-            }}
-          >
-            No hay partido actual o siguiente en este momento.
-          </p>
-        ) : (
-          groupedMatches.map((match) => {
-            const savedCount = match.entries.filter(
-              (entry) => entry.has_prediction
-            ).length
-
-            return (
-              <div
-                key={match.match_id}
-                style={{
-                  border: '1px solid #e5e5e5',
-                  borderRadius: '14px',
-                  padding: '16px',
-                  marginBottom: '16px',
-                  background: '#fafafa'
-                }}
-              >
-                <h3 style={{ marginBottom: '5px', textAlign: 'center' }}>
-                  {renderMatchTitle(match.home_team, match.away_team)}
-                </h3>
-
-                <p
-                  style={{
-                    color: '#777',
-                    textAlign: 'center',
-                    marginBottom: '12px',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  {formatMatchDate(match.kickoff)} · {savedCount}/
-                  {match.entries.length} pronósticos guardados
-                </p>
-
-                <div style={{ overflowX: 'auto' }}>
-                  <table
-                    style={{
-                      width: '100%',
-                      borderCollapse: 'collapse',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', padding: '8px' }}>
-                          Participante
-                        </th>
-                        <th style={{ textAlign: 'center', padding: '8px' }}>
-                          Pronóstico
-                        </th>
-                        <th style={{ textAlign: 'center', padding: '8px' }}>
-                          Estado
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {match.entries.map((entry) => (
-                        <tr key={`${entry.match_id}-${entry.participant_name}`}>
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee'
-                            }}
-                          >
-                            {entry.participant_name}
-                            {currentParticipant.name === entry.participant_name
-                              ? ' 👈 Tú'
-                              : ''}
-                          </td>
-
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee',
-                              textAlign: 'center',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {entry.has_prediction
-                              ? `${entry.predicted_home} - ${entry.predicted_away}`
-                              : '-'}
-                          </td>
-
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee',
-                              textAlign: 'center',
-                              color: entry.has_prediction
-                                ? '#006847'
-                                : '#b00020',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {entry.has_prediction ? 'Guardado' : 'Pendiente'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )
-          })
-        )}
-      </section>
-    )
-  }
-
-  function renderAdminPredictionsSection() {
-    if (!isAdmin) {
-      return null
-    }
-
-    const championCompleted = adminChampionPredictions.filter(
-      (entry) => entry.has_prediction
-    ).length
-
-    const adminMatchOptions = Array.from(
-      new Map(
-        adminMatchPredictions.map((entry) => [
-          String(entry.match_id),
-          {
-            match_id: entry.match_id,
-            home_team: entry.home_team,
-            away_team: entry.away_team,
-            kickoff: entry.kickoff
-          }
-        ])
-      ).values()
-    )
-
-    const filteredAdminMatchPredictions = adminMatchPredictions.filter(
-      (entry) => {
-        const hasPrediction =
-          entry.predicted_home !== null &&
-          entry.predicted_home !== undefined &&
-          entry.predicted_away !== null &&
-          entry.predicted_away !== undefined
-
-        const matchesParticipant =
-          adminParticipantSearch.trim() === '' ||
-          entry.participant_name
-            .toLowerCase()
-            .includes(adminParticipantSearch.trim().toLowerCase())
-
-        const matchesMatch =
-          adminMatchFilter === 'all' ||
-          String(entry.match_id) === adminMatchFilter
-
-        const matchesStatus =
-          adminStatusFilter === 'all' ||
-          (adminStatusFilter === 'saved' && hasPrediction) ||
-          (adminStatusFilter === 'pending' && !hasPrediction)
-
-        return matchesParticipant && matchesMatch && matchesStatus
-      }
-    )
-
-    const savedFilteredCount = filteredAdminMatchPredictions.filter((entry) => {
-      return (
-        entry.predicted_home !== null &&
-        entry.predicted_home !== undefined &&
-        entry.predicted_away !== null &&
-        entry.predicted_away !== undefined
-      )
-    }).length
-
-    function clearAdminFilters() {
-      setAdminParticipantSearch('')
-      setAdminMatchFilter('all')
-      setAdminStatusFilter('all')
-    }
-
-    return (
-      <section
-        id="admin-pronosticos"
-        style={{
-          marginTop: '25px',
-          background: 'white',
-          color: '#222',
-          borderRadius: '20px',
-          padding: '25px',
-          maxWidth: '1100px',
-          marginLeft: 'auto',
-          marginRight: 'auto',
-          scrollMarginTop: '90px'
-        }}
-      >
-        <h2 style={{ marginBottom: '8px' }}>🛠️ Admin: Pronósticos</h2>
-
-        <p style={{ color: '#666', marginBottom: '18px' }}>
-          Revisión de los pronósticos guardados por los participantes.
-        </p>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr',
-            gap: '20px'
-          }}
-        >
-          <div
-            style={{
-              border: '1px solid #e5e5e5',
-              borderRadius: '14px',
-              padding: '16px',
-              background: '#fafafa'
-            }}
-          >
-            <h3 style={{ marginBottom: '10px' }}>
-              🏆 Campeón del Mundial ({championCompleted}/
-              {adminChampionPredictions.length})
-            </h3>
-
-            {adminChampionPredictions.length === 0 ? (
-              <p style={{ color: '#777' }}>No hay datos todavía</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table
-                  style={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>
-                        Participante
-                      </th>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>
-                        Campeón elegido
-                      </th>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>
-                        Estado
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {adminChampionPredictions.map((entry) => (
-                      <tr key={entry.user_id}>
-                        <td
-                          style={{
-                            padding: '8px',
-                            borderTop: '1px solid #eee'
-                          }}
-                        >
-                          {entry.participant_name}
-                        </td>
-
-                        <td
-                          style={{
-                            padding: '8px',
-                            borderTop: '1px solid #eee',
-                            fontWeight: entry.has_prediction
-                              ? 'bold'
-                              : 'normal'
-                          }}
-                        >
-                          {entry.team_name || '-'}
-                        </td>
-
-                        <td
-                          style={{
-                            padding: '8px',
-                            borderTop: '1px solid #eee',
-                            color: entry.has_prediction ? '#006847' : '#b00020',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {entry.has_prediction ? 'Guardado' : 'Pendiente'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              border: '1px solid #e5e5e5',
-              borderRadius: '14px',
-              padding: '16px',
-              background: '#fafafa'
-            }}
-          >
-            <h3 style={{ marginBottom: '10px' }}>
-              ⚽ Pronósticos de partidos
-            </h3>
-
-            <p style={{ color: '#666', marginBottom: '12px' }}>
-              Muestra todos los participantes por partido. Si alguien no ha
-              guardado pronóstico, aparece como pendiente.
-            </p>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr auto',
-                gap: '10px',
-                marginBottom: '14px',
-                alignItems: 'end'
-              }}
-              className="admin-filter-grid"
-            >
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    color: '#666',
-                    marginBottom: '5px'
-                  }}
-                >
-                  Buscar participante
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="Ejemplo: Atenea"
-                  value={adminParticipantSearch}
-                  onChange={(e) => setAdminParticipantSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px',
-                    borderRadius: '8px',
-                    border: '1px solid #ccc'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    color: '#666',
-                    marginBottom: '5px'
-                  }}
-                >
-                  Filtrar partido
-                </label>
-
-                <select
-                  value={adminMatchFilter}
-                  onChange={(e) => setAdminMatchFilter(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px',
-                    borderRadius: '8px',
-                    border: '1px solid #ccc'
-                  }}
-                >
-                  <option value="all">Todos los partidos</option>
-
-                  {adminMatchOptions.map((match) => (
-                    <option key={match.match_id} value={String(match.match_id)}>
-                      {`${getTeamFlag(match.home_team)} ${match.home_team} vs ${getTeamFlag(match.away_team)} ${match.away_team}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    color: '#666',
-                    marginBottom: '5px'
-                  }}
-                >
-                  Estado
-                </label>
-
-                <select
-                  value={adminStatusFilter}
-                  onChange={(e) => setAdminStatusFilter(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px',
-                    borderRadius: '8px',
-                    border: '1px solid #ccc'
-                  }}
-                >
-                  <option value="all">Todos</option>
-                  <option value="saved">Solo guardados</option>
-                  <option value="pending">Solo pendientes</option>
-                </select>
-              </div>
-
-              <button
-                onClick={clearAdminFilters}
-                style={{
-                  padding: '10px 13px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  background: '#777',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                Limpiar
-              </button>
-            </div>
-
-            <div
-              style={{
-                marginBottom: '12px',
-                color: '#666',
-                fontSize: '0.9rem'
-              }}
-            >
-              Mostrando {filteredAdminMatchPredictions.length} de{' '}
-              {adminMatchPredictions.length} filas · Guardados en filtro:{' '}
-              {savedFilteredCount}
-            </div>
-
-            {adminMatchPredictions.length === 0 ? (
-              <p style={{ color: '#777' }}>
-                No hay partidos o participantes todavía
-              </p>
-            ) : filteredAdminMatchPredictions.length === 0 ? (
-              <p style={{ color: '#777' }}>
-                No hay resultados con esos filtros
-              </p>
-            ) : (
-              <div
-                style={{
-                  maxHeight: '420px',
-                  overflow: 'auto'
-                }}
-              >
-                <table
-                  style={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.86rem'
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>
-                        Partido
-                      </th>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>
-                        Participante
-                      </th>
-                      <th style={{ textAlign: 'center', padding: '8px' }}>
-                        Pronóstico
-                      </th>
-                      <th style={{ textAlign: 'center', padding: '8px' }}>
-                        Estado
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {filteredAdminMatchPredictions.map((entry, index) => {
-                      const hasPrediction =
-                        entry.predicted_home !== null &&
-                        entry.predicted_home !== undefined &&
-                        entry.predicted_away !== null &&
-                        entry.predicted_away !== undefined
-
-                      return (
-                        <tr
-                          key={`${entry.match_id}-${entry.participant_name}-${index}`}
-                        >
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee'
-                            }}
-                          >
-                            <strong>
-                              {renderMatchTitle(entry.home_team, entry.away_team)}
-                            </strong>
-                            <br />
-                            <small style={{ color: '#777' }}>
-                              {formatMatchDate(entry.kickoff)}
-                            </small>
-                          </td>
-
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee'
-                            }}
-                          >
-                            {entry.participant_name}
-                          </td>
-
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee',
-                              textAlign: 'center',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {hasPrediction
-                              ? `${entry.predicted_home} - ${entry.predicted_away}`
-                              : '-'}
-                          </td>
-
-                          <td
-                            style={{
-                              padding: '8px',
-                              borderTop: '1px solid #eee',
-                              textAlign: 'center',
-                              color: hasPrediction ? '#006847' : '#b00020',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {hasPrediction ? 'Guardado' : 'Pendiente'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  function renderAdminAddMatchBox() {
-    if (!isAdmin) {
-      return null
-    }
-
-    return (
-      <div
-        style={{
-          marginBottom: '22px',
-          padding: '18px',
-          borderRadius: '14px',
-          background: '#fff7e6',
-          border: '1px solid #f0c36d',
-          textAlign: 'center'
-        }}
-      >
-        <h3 style={{ marginBottom: '15px' }}>🛠️ Admin: Agregar Partido</h3>
-
-        <div
-          className="admin-add-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '12px',
-            marginBottom: '12px'
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Equipo local"
-            value={newMatchHome}
-            onChange={(e) => setNewMatchHome(e.target.value)}
-            style={{
-              padding: '10px',
-              borderRadius: '8px',
-              border: '1px solid #ccc'
-            }}
-          />
-
-          <input
-            type="text"
-            placeholder="Equipo visitante"
-            value={newMatchAway}
-            onChange={(e) => setNewMatchAway(e.target.value)}
-            style={{
-              padding: '10px',
-              borderRadius: '8px',
-              border: '1px solid #ccc'
-            }}
-          />
-        </div>
-
-        <input
-          type="datetime-local"
-          value={newMatchKickoff}
-          onChange={(e) => setNewMatchKickoff(e.target.value)}
-          style={{
-            width: '100%',
-            maxWidth: '360px',
-            padding: '10px',
-            borderRadius: '8px',
-            border: '1px solid #ccc',
-            marginBottom: '12px'
-          }}
-        />
-
-        <br />
-
-        <button
-          onClick={addNewMatch}
-          style={{
-            padding: '10px 15px',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            background: '#ce1126',
-            color: 'white',
-            fontWeight: 'bold'
-          }}
-        >
-          Agregar partido
-        </button>
-      </div>
-    )
-  }
-
-  function getMatchBadge(match: Match, locked: boolean, hasFinalScore: boolean) {
-    if (hasFinalScore || match.status === 'finished') {
-      return {
-        label: '✅ Resultado capturado',
-        background: '#e9f8ef',
-        color: '#006847'
-      }
-    }
-
-    if (locked) {
-      return {
-        label: '🔒 Cerrado',
-        background: '#eeeeee',
-        color: '#555'
-      }
-    }
-
-    return {
-      label: '🟢 Abierto',
-      background: '#e9f8ef',
-      color: '#006847'
-    }
-  }
-
-  function formatMatchDate(kickoff: string) {
-    const date = new Date(kickoff)
-
-    const datePart = date.toLocaleDateString('es-MX', {
-      timeZone: APP_TIME_ZONE,
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short'
-    })
-
-    const timePart = date
-      .toLocaleTimeString('en-US', {
-        timeZone: APP_TIME_ZONE,
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      })
-      .toLowerCase()
-
-    return `${datePart} · ${timePart}`
-  }
-
-  function renderMatchCard(match: Match, locked: boolean) {
-    const hasFinalScore =
-      match.home_score !== null &&
-      match.home_score !== undefined &&
-      match.away_score !== null &&
-      match.away_score !== undefined
-
-    const badge = getMatchBadge(match, locked, hasFinalScore)
-
-    const adminHomeValue =
-      resultInputs[match.id]?.home ??
-      (match.home_score !== null && match.home_score !== undefined
-        ? String(match.home_score)
-        : '')
-
-    const adminAwayValue =
-      resultInputs[match.id]?.away ??
-      (match.away_score !== null && match.away_score !== undefined
-        ? String(match.away_score)
-        : '')
-
-    return (
-      <div
-        key={match.id}
-        className="match-card"
-        style={{
-          border: '2px solid #e5e5e5',
-          borderRadius: '16px',
-          padding: '18px',
-          marginBottom: '15px',
-          background: '#fafafa',
-          textAlign: 'center'
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            marginBottom: '12px'
-          }}
-        >
-          <span
-            style={{
-              padding: '7px 12px',
-              borderRadius: '999px',
-              background: badge.background,
-              color: badge.color,
-              fontWeight: 'bold',
-              fontSize: '0.82rem'
-            }}
-          >
-            {badge.label}
-          </span>
-        </div>
-
-        <div
-          className="match-score-row"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '180px 80px',
-            gap: '10px',
-            alignItems: 'center',
-            marginBottom: '10px',
-            maxWidth: '320px',
-            marginLeft: 'auto',
-            marginRight: 'auto'
-          }}
-        >
-          <strong>{renderTeamName(match.home_team)}</strong>
-
-          <input
-            type="number"
-            min="0"
-            value={predictions[match.id]?.home || ''}
-            disabled={locked || !currentParticipant}
-            style={{
-              width: '70px',
-              padding: '7px',
-              borderRadius: '6px',
-              border: '1px solid #ccc'
-            }}
-            onChange={(e) =>
-              setPredictions({
-                ...predictions,
-                [match.id]: {
-                  ...predictions[match.id],
-                  home: e.target.value
-                }
-              })
-            }
-          />
-        </div>
-
-        <div
-          className="match-score-row"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '180px 80px',
-            gap: '10px',
-            alignItems: 'center',
-            maxWidth: '320px',
-            marginLeft: 'auto',
-            marginRight: 'auto'
-          }}
-        >
-          <strong>{renderTeamName(match.away_team)}</strong>
-
-          <input
-            type="number"
-            min="0"
-            value={predictions[match.id]?.away || ''}
-            disabled={locked || !currentParticipant}
-            style={{
-              width: '70px',
-              padding: '7px',
-              borderRadius: '6px',
-              border: '1px solid #ccc'
-            }}
-            onChange={(e) =>
-              setPredictions({
-                ...predictions,
-                [match.id]: {
-                  ...predictions[match.id],
-                  away: e.target.value
-                }
-              })
-            }
-          />
-        </div>
-
-        <div
-          style={{
-            color: '#666',
-            marginTop: '15px'
-          }}
-        >
-          📅 {formatMatchDate(match.kickoff)}
-        </div>
-
-        {hasFinalScore && (
-          <div
-            style={{
-              marginTop: '10px',
-              fontWeight: 'bold',
-              color: '#006847'
-            }}
-          >
-            Resultado final: {getTeamFlag(match.home_team)} {match.home_team}{' '}
-            {match.home_score} - {match.away_score}{' '}
-            {getTeamFlag(match.away_team)} {match.away_team}
-          </div>
-        )}
-
-        {!locked && (
-          <button
-            onClick={() => savePrediction(match.id)}
-            style={{
-              marginTop: '15px',
-              padding: '10px 15px',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              background: currentParticipant ? '#006847' : '#999',
-              color: 'white',
-              fontWeight: 'bold'
-            }}
-          >
-            {currentParticipant
-              ? 'Guardar Pronóstico'
-              : 'Entra con tu PIN para guardar'}
-          </button>
-        )}
-
-        {locked && (
-          <button
-            disabled
-            style={{
-              marginTop: '15px',
-              padding: '10px 15px',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'not-allowed',
-              background: '#999',
-              color: 'white',
-              fontWeight: 'bold'
-            }}
-          >
-            🔒 Pronóstico Cerrado
-          </button>
-        )}
 
         {isAdmin && (
           <div
             style={{
-              marginTop: '18px',
-              padding: '15px',
+              margin: '0 auto 18px',
+              maxWidth: '900px',
+              padding: '12px 14px',
               borderRadius: '12px',
               background: '#fff7e6',
-              border: '1px solid #f0c36d'
+              border: '1px solid #efc26a',
+              color: '#704300',
+              textAlign: 'center',
+              fontSize: '0.9rem'
             }}
           >
-            <strong>🛠️ Admin: Resultado Final</strong>
-
-            <div
-              className="admin-result-row"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '180px 80px',
-                gap: '10px',
-                alignItems: 'center',
-                maxWidth: '320px',
-                margin: '15px auto 10px'
-              }}
-            >
-              <span>{renderTeamName(match.home_team)}</span>
-
-              <input
-                type="number"
-                min="0"
-                value={adminHomeValue}
-                style={{
-                  width: '70px',
-                  padding: '7px',
-                  borderRadius: '6px',
-                  border: '1px solid #ccc'
-                }}
-                onChange={(e) =>
-                  setResultInputs({
-                    ...resultInputs,
-                    [match.id]: {
-                      ...resultInputs[match.id],
-                      home: e.target.value
-                    }
-                  })
-                }
-              />
-
-              <span>{renderTeamName(match.away_team)}</span>
-
-              <input
-                type="number"
-                min="0"
-                value={adminAwayValue}
-                style={{
-                  width: '70px',
-                  padding: '7px',
-                  borderRadius: '6px',
-                  border: '1px solid #ccc'
-                }}
-                onChange={(e) =>
-                  setResultInputs({
-                    ...resultInputs,
-                    [match.id]: {
-                      ...resultInputs[match.id],
-                      away: e.target.value
-                    }
-                  })
-                }
-              />
-            </div>
-
-            <button
-              onClick={() => saveFinalResult(match)}
-              style={{
-                marginTop: '10px',
-                padding: '10px 15px',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                background: '#ce1126',
-                color: 'white',
-                fontWeight: 'bold'
-              }}
-            >
-              Guardar resultado y calcular puntos
-            </button>
+            <strong>Modo administrador:</strong> abre “Capturar resultado” en
+            cada partido. Si el marcador termina empatado, selecciona el ganador
+            por penales para que avance a la siguiente ronda.
           </div>
         )}
-      </div>
+
+        <div
+          style={{
+            overflowX: 'auto',
+            paddingBottom: '10px',
+            borderRadius: '16px',
+            background: '#f7f5f1',
+            border: '1px solid #e9e3d9'
+          }}
+        >
+          <div
+            style={{
+              minWidth: '1330px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, minmax(248px, 1fr))',
+              gap: '12px',
+              padding: '14px'
+            }}
+          >
+            {ROUND_ORDER.map((round) => renderBracketColumn(round))}
+          </div>
+        </div>
+
+        <p
+          style={{
+            margin: '12px 0 0',
+            textAlign: 'center',
+            color: '#777',
+            fontSize: '0.82rem'
+          }}
+        >
+          En celular, desliza horizontalmente para recorrer todas las rondas.
+        </p>
+      </section>
     )
   }
 
-  function renderMatchGroups(groups: MatchGroup[], emptyText: string) {
-    if (groups.length === 0) {
-      return <p style={{ color: '#777', marginBottom: '20px' }}>{emptyText}</p>
+  function renderAdminCurrentMatchPredictions() {
+    if (!isAdmin) {
+      return null
     }
 
-    return groups.map((group) => (
-      <div key={group.dateKey}>
-        <div
-          className="date-group-title"
+    const now = new Date()
+
+    const confirmedOpenMatches = matches
+      .filter(
+        (match) =>
+          isMatchConfirmed(match) &&
+          match.status !== 'finished'
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
+      )
+
+    const currentMatch =
+      confirmedOpenMatches.find((match) => {
+        const kickoffTime = new Date(match.kickoff).getTime()
+        const sixHoursAgo = now.getTime() - 6 * 60 * 60 * 1000
+
+        return kickoffTime >= sixHoursAgo && kickoffTime <= now.getTime()
+      }) ||
+      confirmedOpenMatches.find(
+        (match) => new Date(match.kickoff).getTime() > now.getTime()
+      )
+
+    if (!currentMatch) {
+      return (
+        <section id="admin-en-curso" style={secondarySectionStyle}>
+          <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+            🛠️ Admin: Pronósticos en curso
+          </h2>
+          <p style={{ marginBottom: 0, color: '#777', textAlign: 'center' }}>
+            No hay un partido confirmado disponible.
+          </p>
+        </section>
+      )
+    }
+
+    const currentEntries = adminMatchPredictions.filter(
+      (entry) => entry.match_id === currentMatch.id
+    )
+
+    const savedCount = currentEntries.filter(
+      (entry) =>
+        entry.predicted_home !== null &&
+        entry.predicted_home !== undefined &&
+        entry.predicted_away !== null &&
+        entry.predicted_away !== undefined
+    ).length
+
+    return (
+      <section id="admin-en-curso" style={secondarySectionStyle}>
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+          🛠️ Admin: Pronósticos en curso
+        </h2>
+
+        <p
           style={{
-            margin: '18px 0 12px',
-            padding: '9px 12px',
-            borderRadius: '999px',
-            background: '#f0f4f2',
-            color: '#006847',
-            fontWeight: 'bold',
             textAlign: 'center',
-            textTransform: 'capitalize'
+            color: '#666',
+            margin: '8px 0 18px'
           }}
         >
-          {group.dateLabel}
-        </div>
+          {getTeamFlag(currentMatch.home_team)}{' '}
+          <strong>{displayTeamName(currentMatch.home_team)}</strong> vs{' '}
+          {getTeamFlag(currentMatch.away_team)}{' '}
+          <strong>{displayTeamName(currentMatch.away_team)}</strong>
+          <br />
+          <small>
+            {formatMatchDate(currentMatch.kickoff)} · {savedCount}/
+            {currentEntries.length} guardados
+          </small>
+        </p>
 
-        {group.matches.map((match) =>
-          renderMatchCard(match, new Date(match.kickoff) <= new Date())
+        {currentEntries.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#777', marginBottom: 0 }}>
+            Aún no hay registros para mostrar.
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                minWidth: '520px'
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={tableHeadStyle}>Participante</th>
+                  <th style={{ ...tableHeadStyle, textAlign: 'center' }}>
+                    Pronóstico
+                  </th>
+                  <th style={{ ...tableHeadStyle, textAlign: 'center' }}>
+                    Estado
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {currentEntries.map((entry) => {
+                  const hasPrediction =
+                    entry.predicted_home !== null &&
+                    entry.predicted_home !== undefined &&
+                    entry.predicted_away !== null &&
+                    entry.predicted_away !== undefined
+
+                  return (
+                    <tr key={`${entry.match_id}-${entry.participant_name}`}>
+                      <td style={tableCellStyle}>{entry.participant_name}</td>
+                      <td style={{ ...tableCellStyle, textAlign: 'center' }}>
+                        <strong>
+                          {hasPrediction
+                            ? `${entry.predicted_home} - ${entry.predicted_away}`
+                            : '-'}
+                        </strong>
+                      </td>
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          textAlign: 'center',
+                          color: hasPrediction ? '#006847' : '#b00020',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {hasPrediction ? 'Guardado' : 'Pendiente'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-    ))
+      </section>
+    )
   }
 
-  function renderCompactMovementCard(
+  function renderLeaderboard() {
+    return (
+      <section id="tabla" style={secondarySectionStyle}>
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>🏅 Tabla General</h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#777',
+            margin: '8px 0 18px',
+            fontSize: '0.9rem'
+          }}
+        >
+          Desempate: puntos, exactos y resultados acertados.
+        </p>
+
+        {leaderboard.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#777', marginBottom: 0 }}>
+            Aún no hay participantes en la tabla.
+          </p>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '12px'
+            }}
+          >
+            {leaderboard.map((entry, index) => {
+              const medal =
+                index === 0
+                  ? '🥇'
+                  : index === 1
+                    ? '🥈'
+                    : index === 2
+                      ? '🥉'
+                      : `#${entry.position}`
+
+              const isCurrent = currentParticipant?.id === entry.id
+
+              return (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '45px 1fr auto',
+                    gap: '8px',
+                    alignItems: 'center',
+                    padding: '13px',
+                    borderRadius: '14px',
+                    border: '1px solid #eee',
+                    background: isCurrent ? '#e9f8ef' : '#fafafa'
+                  }}
+                >
+                  <strong>{medal}</strong>
+
+                  <div>
+                    <strong>
+                      {entry.name}
+                      {isCurrent ? ' 👈 Tú' : ''}
+                    </strong>
+                    <div
+                      style={{
+                        fontSize: '0.76rem',
+                        color: '#777',
+                        marginTop: '3px'
+                      }}
+                    >
+                      Exactos: {entry.exact_scores} · Acertados:{' '}
+                      {entry.correct_results}
+                    </div>
+                  </div>
+
+                  <strong>{entry.total_points} pts</strong>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  function renderMovement() {
+    const wentUp = movements.filter(
+      (movement) => movement.movement_type === 'subio'
+    )
+    const stayedSame = movements.filter(
+      (movement) =>
+        movement.movement_type === 'igual' ||
+        movement.movement_type === 'nuevo'
+    )
+    const wentDown = movements.filter(
+      (movement) => movement.movement_type === 'bajo'
+    )
+
+    return (
+      <section id="movimiento" style={secondarySectionStyle}>
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+          📈 Movimiento en la Tabla
+        </h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#666',
+            margin: '8px 0 18px'
+          }}
+        >
+          Se actualiza cada vez que el administrador captura un resultado.
+        </p>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '14px'
+          }}
+        >
+          {renderMovementCard('⬆️ Subieron', wentUp, '#006847')}
+          {renderMovementCard('➡️ Igual / Nuevos', stayedSame, '#777')}
+          {renderMovementCard('⬇️ Bajaron', wentDown, '#b00020')}
+        </div>
+      </section>
+    )
+  }
+
+  function renderMovementCard(
     title: string,
     entries: RankingMovementEntry[],
-    emptyText: string,
-    accentColor: string
+    color: string
   ) {
     return (
       <div
-        className="movement-card"
         style={{
           border: '1px solid #e5e5e5',
           borderRadius: '14px',
-          padding: '16px',
+          padding: '14px',
           background: '#fafafa'
         }}
       >
@@ -2242,22 +1658,21 @@ export default function Home() {
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '10px'
+            gap: '10px',
+            alignItems: 'center'
           }}
         >
           <h3 style={{ margin: 0 }}>{title}</h3>
-
           <span
             style={{
-              minWidth: '34px',
-              height: '34px',
-              borderRadius: '999px',
-              background: accentColor,
-              color: 'white',
               display: 'inline-flex',
+              minWidth: '32px',
+              height: '32px',
               alignItems: 'center',
               justifyContent: 'center',
+              borderRadius: '50%',
+              background: color,
+              color: 'white',
               fontWeight: 'bold'
             }}
           >
@@ -2266,44 +1681,39 @@ export default function Home() {
         </div>
 
         {entries.length === 0 ? (
-          <p style={{ color: '#777', margin: 0 }}>{emptyText}</p>
+          <p style={{ color: '#777', marginBottom: 0 }}>
+            Sin cambios todavía.
+          </p>
         ) : (
-          <div
-            style={{
-              maxHeight: '170px',
-              overflowY: 'auto',
-              paddingRight: '4px'
-            }}
-          >
-            {entries.map((entry) => (
-              <div
-                key={entry.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  borderTop: '1px solid #eee',
-                  padding: '8px 0'
-                }}
-              >
-                <span>
-                  <strong>{entry.name}</strong>
-                  <br />
-                  <small style={{ color: '#777' }}>
-                    #{entry.previous_position ?? '-'} → #
-                    {entry.current_position}
-                  </small>
-                </span>
+          entries.map((entry) => (
+            <div
+              key={entry.id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: '10px',
+                borderTop: '1px solid #e8e8e8',
+                paddingTop: '9px',
+                marginTop: '9px'
+              }}
+            >
+              <span>
+                <strong>{entry.name}</strong>
+                <br />
+                <small style={{ color: '#777' }}>
+                  #{entry.previous_position ?? '-'} → #{entry.current_position}
+                </small>
+              </span>
 
-                <strong style={{ color: accentColor }}>
-                  {entry.movement_type === 'subio'
-                    ? `+${entry.movement}`
-                    : entry.movement_type === 'bajo'
-                      ? entry.movement
-                      : '0'}
-                </strong>
-              </div>
-            ))}
-          </div>
+              <strong style={{ color }}>
+                {entry.movement_type === 'subio'
+                  ? `+${entry.movement}`
+                  : entry.movement_type === 'bajo'
+                    ? entry.movement
+                    : '0'}
+              </strong>
+            </div>
+          ))
         )}
       </div>
     )
@@ -2311,281 +1721,58 @@ export default function Home() {
 
   return (
     <main
-      id="inicio"
-      className="app-main"
       style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg,#006847 0%,#004d36 100%)',
         color: 'white',
-        padding: '30px',
+        padding: '24px',
         fontFamily: 'Arial, sans-serif'
       }}
     >
-      <div
-        className="app-container"
-        style={{
-          maxWidth: '1600px',
-          margin: '0 auto'
-        }}
-      >
+      <div style={{ maxWidth: '1800px', margin: '0 auto' }}>
         <div
-          className="top-login-bar"
           style={{
             display: 'flex',
             justifyContent: 'flex-end',
-            marginBottom: '20px'
+            marginBottom: '16px'
           }}
         >
           {renderLoginBox()}
         </div>
 
         <h1
-          className="main-title"
           style={{
+            margin: 0,
             textAlign: 'center',
-            fontSize: '3rem',
-            marginBottom: '10px'
+            fontSize: 'clamp(2rem, 4vw, 3.25rem)'
           }}
         >
           IPAM 🏆 Quiniela Mundialista 2026
         </h1>
 
         <p
-          className="main-subtitle"
           style={{
             textAlign: 'center',
-            opacity: 0.9,
-            marginBottom: '22px'
+            margin: '8px 0 20px',
+            opacity: 0.9
           }}
         >
-          Predice los resultados y compite por el primer lugar
+          Eliminación directa · Dieciseisavos hasta la Final
         </p>
 
         {renderNavBar()}
-
-        {renderMySummaryBox()}
-
-        {renderChampionPredictionBox()}
-
-        <div
-          className="dashboard-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: '25px',
-            alignItems: 'start'
-          }}
-        >
-          <section
-            id="partidos"
-            className="dashboard-panel"
-            style={{
-              background: 'white',
-              color: '#222',
-              borderRadius: '20px',
-              padding: '25px',
-              maxHeight: '82vh',
-              overflowY: 'auto',
-              scrollMarginTop: '90px'
-            }}
-          >
-            <h2 style={{ marginBottom: '20px', textAlign: 'center' }}>
-              ⚽ Partidos
-            </h2>
-
-            {renderAdminAddMatchBox()}
-
-            {!currentParticipant && (
-              <p
-                style={{
-                  textAlign: 'center',
-                  color: '#777',
-                  marginBottom: '18px'
-                }}
-              >
-                Selecciona tu nombre e ingresa tu PIN para guardar pronósticos.
-              </p>
-            )}
-
-            <h3
-              style={{
-                marginBottom: '15px',
-                color: '#006847',
-                textAlign: 'center'
-              }}
-            >
-              🟢 Abiertos
-            </h3>
-
-            {renderMatchGroups(openMatchGroups, 'No hay partidos abiertos')}
-
-            <h3
-              style={{
-                marginTop: '25px',
-                marginBottom: '15px',
-                color: '#777',
-                textAlign: 'center'
-              }}
-            >
-              🔒 Cerrados
-            </h3>
-
-            {renderMatchGroups(closedMatchGroups, 'No hay partidos cerrados')}
-          </section>
-
-          <section
-            id="tabla"
-            className="dashboard-panel"
-            style={{
-              background: 'white',
-              color: '#222',
-              borderRadius: '20px',
-              padding: '25px',
-              maxHeight: '82vh',
-              overflowY: 'auto',
-              position: 'sticky',
-              top: '20px',
-              scrollMarginTop: '90px'
-            }}
-          >
-            <h2 style={{ marginBottom: '10px' }}>🏅 Tabla General</h2>
-
-            <p
-              style={{
-                color: '#777',
-                fontSize: '0.9rem',
-                marginBottom: '20px'
-              }}
-            >
-              Desempate: puntos, exactos, resultados acertados
-            </p>
-
-            {leaderboard.length === 0 ? (
-              <p>Aún no hay puntuaciones</p>
-            ) : (
-              leaderboard.map((entry, index) => {
-                const medal =
-                  index === 0
-                    ? '🥇'
-                    : index === 1
-                      ? '🥈'
-                      : index === 2
-                        ? '🥉'
-                        : `#${entry.position}`
-
-                const isCurrentParticipant =
-                  currentParticipant && entry.id === currentParticipant.id
-
-                return (
-                  <div
-                    key={entry.id}
-                    className="leaderboard-row"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '60px 1fr 90px',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '12px',
-                      borderBottom: '1px solid #eee',
-                      borderRadius: '12px',
-                      background: isCurrentParticipant ? '#e9f8ef' : 'white'
-                    }}
-                  >
-                    <strong>{medal}</strong>
-
-                    <div>
-                      <strong>
-                        {entry.name}
-                        {isCurrentParticipant ? ' 👈 Tú' : ''}
-                      </strong>
-
-                      <div
-                        style={{
-                          fontSize: '0.78rem',
-                          color: '#777',
-                          marginTop: '3px'
-                        }}
-                      >
-                        Exactos: {entry.exact_scores} · Acertados:{' '}
-                        {entry.correct_results}
-                      </div>
-                    </div>
-
-                    <strong style={{ textAlign: 'right' }}>
-                      {entry.total_points} pts
-                    </strong>
-                  </div>
-                )
-              })
-            )}
-          </section>
-        </div>
-
-        {renderLivePredictionsBox()}
-
-        <section
-          id="movimiento"
-          className="movement-section"
-          style={{
-            marginTop: '25px',
-            background: 'white',
-            color: '#222',
-            borderRadius: '20px',
-            padding: '25px',
-            maxWidth: '1100px',
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            scrollMarginTop: '90px'
-          }}
-        >
-          <h2 style={{ marginBottom: '8px' }}>📈 Movimiento en la Tabla</h2>
-
-          <p style={{ color: '#666', marginBottom: '18px' }}>
-            Resumen de cambios comparando el ranking actual contra el ranking
-            anterior.
-          </p>
-
-          <div
-            className="movement-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '15px',
-              alignItems: 'start'
-            }}
-          >
-            {renderCompactMovementCard(
-              '⬆️ Subieron',
-              wentUp,
-              'Nadie subió todavía',
-              '#006847'
-            )}
-
-            {renderCompactMovementCard(
-              '➡️ Igual / Nuevos',
-              stayedSame,
-              'Sin movimientos todavía',
-              '#777'
-            )}
-
-            {renderCompactMovementCard(
-              '⬇️ Bajaron',
-              wentDown,
-              'Nadie bajó todavía',
-              '#b00020'
-            )}
-          </div>
-        </section>
-
-        {renderAdminPredictionsSection()}
+        {renderProfileSummary()}
+        {renderKnockoutBracket()}
+        {renderAdminCurrentMatchPredictions()}
+        {renderLeaderboard()}
+        {renderMovement()}
 
         <footer
           style={{
             textAlign: 'center',
-            marginTop: '26px',
-            padding: '18px',
+            marginTop: '24px',
             opacity: 0.85,
-            fontSize: '0.9rem'
+            fontSize: '0.88rem'
           }}
         >
           IPAM Quiniela Mundialista 2026 · Uso interno
@@ -2593,4 +1780,106 @@ export default function Home() {
       </div>
     </main>
   )
+}
+
+function SummaryStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div
+      style={{
+        padding: '10px 12px',
+        borderRadius: '12px',
+        background: '#f6f6f6'
+      }}
+    >
+      <div style={{ color: '#777', fontSize: '0.78rem' }}>{label}</div>
+      <strong style={{ color: '#006847', fontSize: '1.15rem' }}>{value}</strong>
+    </div>
+  )
+}
+
+const navLinkStyle = {
+  color: 'white',
+  textDecoration: 'none',
+  padding: '8px 12px',
+  borderRadius: '999px',
+  background: 'rgba(255,255,255,0.13)',
+  fontWeight: 'bold',
+  fontSize: '0.88rem'
+} as const
+
+const headerInputStyle = {
+  padding: '9px',
+  borderRadius: '8px',
+  border: 'none',
+  maxWidth: '180px'
+} as const
+
+const headerButtonStyle = {
+  padding: '9px 13px',
+  borderRadius: '8px',
+  border: 'none',
+  cursor: 'pointer',
+  fontWeight: 'bold'
+} as const
+
+const smallHeaderButtonStyle = {
+  marginLeft: '10px',
+  padding: '8px 12px',
+  borderRadius: '8px',
+  border: 'none',
+  cursor: 'pointer'
+} as const
+
+const teamPredictionRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 42px',
+  gap: '8px',
+  alignItems: 'center',
+  paddingBottom: '8px',
+  borderBottom: '1px solid #eee'
+} as const
+
+function scoreInputStyle(disabled: boolean) {
+  return {
+    width: '42px',
+    padding: '7px 3px',
+    textAlign: 'center' as const,
+    borderRadius: '7px',
+    border: '1px solid #cfcfcf',
+    background: disabled ? '#eeeeee' : 'white',
+    color: '#222',
+    fontWeight: 'bold',
+    cursor: disabled ? 'not-allowed' : 'text'
+  }
+}
+
+const adminScoreInputStyle = {
+  width: '48px',
+  padding: '7px 3px',
+  textAlign: 'center' as const,
+  borderRadius: '7px',
+  border: '1px solid #c7a95f',
+  background: 'white',
+  color: '#222',
+  fontWeight: 'bold'
+}
+
+const secondarySectionStyle = {
+  background: 'white',
+  color: '#222',
+  borderRadius: '22px',
+  padding: '22px',
+  marginBottom: '25px',
+  scrollMarginTop: '90px'
+} as const
+
+const tableHeadStyle = {
+  padding: '9px',
+  textAlign: 'left' as const,
+  borderBottom: '2px solid #e6e6e6'
+}
+
+const tableCellStyle = {
+  padding: '9px',
+  borderBottom: '1px solid #eeeeee'
 }
