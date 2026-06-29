@@ -33,6 +33,19 @@ type CurrentParticipant = {
   name: string
 }
 
+type ChampionPrediction = {
+  team_name: string
+  created_at: string | null
+}
+
+type AdminChampionPrediction = {
+  user_id: string
+  participant_name: string
+  team_name: string | null
+  created_at: string | null
+  has_prediction: boolean
+}
+
 type LeaderboardEntry = {
   position: number
   id: string
@@ -255,6 +268,13 @@ export default function Home() {
   )
   const [adminReviewError, setAdminReviewError] = useState('')
 
+  const [championInput, setChampionInput] = useState('')
+  const [championPrediction, setChampionPrediction] =
+    useState<ChampionPrediction | null>(null)
+  const [adminChampionPredictions, setAdminChampionPredictions] = useState<
+    AdminChampionPrediction[]
+  >([])
+
   const [currentParticipant, setCurrentParticipant] =
     useState<CurrentParticipant | null>(null)
   const [participantPin, setParticipantPin] = useState('')
@@ -296,6 +316,7 @@ export default function Home() {
 
       setParticipantPin(savedParticipantPin)
       loadPredictionsForParticipant(savedParticipantId, savedParticipantPin)
+      loadChampionPrediction(savedParticipantId, savedParticipantPin)
     }
 
     const savedAdminPin = localStorage.getItem('quiniela_admin_pin')
@@ -314,10 +335,12 @@ export default function Home() {
 
       if (currentParticipant && participantPin) {
         loadPredictionsForParticipant(currentParticipant.id, participantPin)
+        loadChampionPrediction(currentParticipant.id, participantPin)
       }
 
       if (isAdmin && adminPin) {
         loadAdminMatchPredictions(adminPin)
+        loadAdminChampionPredictions(adminPin)
       }
     }, 60000)
 
@@ -398,6 +421,18 @@ export default function Home() {
   )
 
   const tournamentIsFinished = !!finalMatch
+
+  const championTeamOptions = Array.from(
+    new Set(
+      matches.flatMap((match) =>
+        [match.home_team, match.away_team].filter(
+          (team) => !isPlaceholderTeam(team)
+        )
+      )
+    )
+  ).sort((first, second) =>
+    displayTeamName(first).localeCompare(displayTeamName(second), 'es')
+  )
 
   async function loadMatches() {
     const { data, error } = await supabase.from('matches').select('*')
@@ -493,6 +528,86 @@ export default function Home() {
     setPredictions(loaded)
   }
 
+  async function loadChampionPrediction(userId: string, pinCode: string) {
+    const { data, error } = await supabase.rpc(
+      'get_champion_prediction_by_pin',
+      {
+        p_user_id: userId,
+        p_pin_code: pinCode
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    if (data && data.length > 0) {
+      const saved = data[0] as ChampionPrediction
+      setChampionPrediction(saved)
+      setChampionInput(saved.team_name)
+      return
+    }
+
+    setChampionPrediction(null)
+    setChampionInput('')
+  }
+
+  async function saveChampionPrediction() {
+    if (!currentParticipant) {
+      alert('Debes entrar con tu nombre y PIN')
+      return
+    }
+
+    if (championInput === '') {
+      alert('Selecciona el equipo que será campeón')
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Solo puedes elegir un equipo campeón. Después de guardarlo, tu elección quedará bloqueada. ¿Confirmas tu elección?'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    const { error } = await supabase.rpc('save_champion_prediction_by_pin', {
+      p_user_id: currentParticipant.id,
+      p_pin_code: participantPin,
+      p_team_name: championInput
+    })
+
+    if (error) {
+      console.error(error)
+      alert(`Error: ${error.message}`)
+      return
+    }
+
+    alert('✅ Campeón guardado. Esta elección quedó bloqueada.')
+    loadChampionPrediction(currentParticipant.id, participantPin)
+
+    if (isAdmin && adminPin) {
+      loadAdminChampionPredictions(adminPin)
+    }
+  }
+
+  async function loadAdminChampionPredictions(pinToUse: string) {
+    const { data, error } = await supabase.rpc(
+      'get_admin_champion_predictions',
+      {
+        p_admin_pin: pinToUse
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setAdminChampionPredictions((data || []) as AdminChampionPrediction[])
+  }
+
   async function loadAdminMatchPredictions(pinToUse: string) {
     const { data, error } = await supabase.rpc(
       'get_admin_all_match_predictions',
@@ -550,10 +665,13 @@ export default function Home() {
     localStorage.setItem('quiniela_participant_pin', loginPinInput.trim())
 
     loadPredictionsForParticipant(loggedUser.user_id, loginPinInput.trim())
+    loadChampionPrediction(loggedUser.user_id, loginPinInput.trim())
     setLoginPinInput('')
   }
 
   function logoutParticipant() {
+    setChampionPrediction(null)
+    setChampionInput('')
     setCurrentParticipant(null)
     setParticipantPin('')
     setPredictions({})
@@ -578,6 +696,7 @@ export default function Home() {
       setIsAdmin(false)
       setAdminPin('')
       setAdminMatchPredictions([])
+      setAdminChampionPredictions([])
       localStorage.removeItem('quiniela_admin_pin')
 
       if (showSuccess) {
@@ -591,6 +710,7 @@ export default function Home() {
     setAdminPin(pinToCheck)
     localStorage.setItem('quiniela_admin_pin', pinToCheck)
     loadAdminMatchPredictions(pinToCheck)
+    loadAdminChampionPredictions(pinToCheck)
 
     if (showSuccess) {
       alert('✅ Admin activado')
@@ -613,6 +733,7 @@ export default function Home() {
     setResultInputs({})
     setWinnerInputs({})
     setAdminMatchPredictions([])
+    setAdminChampionPredictions([])
     setAdminReviewMatchId(null)
     setAdminReviewError('')
     localStorage.removeItem('quiniela_admin_pin')
@@ -988,6 +1109,11 @@ export default function Home() {
         <a href="#llaves" style={navLinkStyle}>
           Llaves
         </a>
+        {currentParticipant && (
+          <a href="#campeon" style={navLinkStyle}>
+            Mi campeón
+          </a>
+        )}
         <a href="#tabla" style={navLinkStyle}>
           Tabla general
         </a>
@@ -1003,9 +1129,14 @@ export default function Home() {
           Movimiento
         </a>
         {isAdmin && (
-          <a href="#admin-en-curso" style={navLinkStyle}>
-            Admin: Pronósticos
-          </a>
+          <>
+            <a href="#admin-en-curso" style={navLinkStyle}>
+              Admin: Pronósticos
+            </a>
+            <a href="#admin-campeon" style={navLinkStyle}>
+              Admin: Campeón
+            </a>
+          </>
         )}
       </nav>
     )
@@ -1060,6 +1191,103 @@ export default function Home() {
             value={savedPredictionCount}
           />
         </div>
+      </section>
+    )
+  }
+
+
+  function renderChampionPredictionBox() {
+    if (!currentParticipant) {
+      return null
+    }
+
+    const isLocked = !!championPrediction
+
+    return (
+      <section
+        id="campeon"
+        style={{
+          ...secondarySectionStyle,
+          border: isLocked ? '2px solid #006847' : '2px solid #f2c14e'
+        }}
+      >
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+          🏆 ¿Quién ganará el Mundial?
+        </h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#666',
+            margin: '8px auto 16px',
+            maxWidth: '720px'
+          }}
+        >
+          Elige un solo equipo campeón. Al guardar, la elección queda bloqueada.
+          Esta predicción es independiente y no modifica los puntos actuales de
+          la tabla.
+        </p>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '10px',
+            flexWrap: 'wrap'
+          }}
+        >
+          <select
+            value={championInput}
+            disabled={isLocked}
+            onChange={(event) => setChampionInput(event.target.value)}
+            style={{
+              width: 'min(100%, 360px)',
+              padding: '11px',
+              borderRadius: '10px',
+              border: '1px solid #cfcfcf',
+              background: isLocked ? '#f1f1f1' : 'white',
+              color: '#222'
+            }}
+          >
+            <option value="">Selecciona el equipo campeón</option>
+            {championTeamOptions.map((team) => (
+              <option key={team} value={team}>
+                {getTeamFlag(team)} {displayTeamName(team)}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={saveChampionPrediction}
+            disabled={isLocked}
+            style={{
+              padding: '11px 16px',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: isLocked ? 'not-allowed' : 'pointer',
+              background: isLocked ? '#999' : '#006847',
+              color: 'white',
+              fontWeight: 'bold'
+            }}
+          >
+            {isLocked ? '🔒 Elección bloqueada' : 'Guardar campeón'}
+          </button>
+        </div>
+
+        {isLocked && (
+          <p
+            style={{
+              margin: '15px 0 0',
+              textAlign: 'center',
+              color: '#006847',
+              fontWeight: 'bold'
+            }}
+          >
+            Tu elección: {getTeamFlag(championPrediction.team_name)}{' '}
+            {displayTeamName(championPrediction.team_name)}
+          </p>
+        )}
       </section>
     )
   }
@@ -1810,6 +2038,87 @@ export default function Home() {
     )
   }
 
+
+  function renderAdminChampionPredictions() {
+    if (!isAdmin) {
+      return null
+    }
+
+    const savedCount = adminChampionPredictions.filter(
+      (entry) => entry.has_prediction
+    ).length
+
+    return (
+      <section id="admin-campeon" style={secondarySectionStyle}>
+        <h2 style={{ marginTop: 0, textAlign: 'center' }}>
+          🛠️ Admin: Predicción de campeón
+        </h2>
+
+        <p
+          style={{
+            textAlign: 'center',
+            color: '#666',
+            margin: '8px 0 18px'
+          }}
+        >
+          {savedCount}/{adminChampionPredictions.length} participantes han
+          guardado su elección.
+        </p>
+
+        {adminChampionPredictions.length === 0 ? (
+          <p style={{ marginBottom: 0, textAlign: 'center', color: '#777' }}>
+            No hay participantes activos para revisar.
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                minWidth: '480px'
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={tableHeadStyle}>Participante</th>
+                  <th style={tableHeadStyle}>Campeón elegido</th>
+                  <th style={{ ...tableHeadStyle, textAlign: 'center' }}>
+                    Estado
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {adminChampionPredictions.map((entry) => (
+                  <tr key={entry.user_id}>
+                    <td style={tableCellStyle}>{entry.participant_name}</td>
+                    <td style={tableCellStyle}>
+                      {entry.team_name
+                        ? `${getTeamFlag(entry.team_name)} ${displayTeamName(
+                            entry.team_name
+                          )}`
+                        : '—'}
+                    </td>
+                    <td
+                      style={{
+                        ...tableCellStyle,
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: entry.has_prediction ? '#006847' : '#b00020'
+                      }}
+                    >
+                      {entry.has_prediction ? 'Guardado' : 'Pendiente'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )
+  }
+
   function renderLeaderboard() {
     return (
       <section
@@ -2268,6 +2577,7 @@ export default function Home() {
 
         {renderNavBar()}
         {renderProfileSummary()}
+        {renderChampionPredictionBox()}
         {renderKnockoutBracket()}
 
         <div
@@ -2285,6 +2595,7 @@ export default function Home() {
 
         {renderChampionBadges()}
         {renderAdminCurrentMatchPredictions()}
+        {renderAdminChampionPredictions()}
         {renderMovement()}
 
         <footer
