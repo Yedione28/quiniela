@@ -1812,7 +1812,10 @@ export default function Home() {
 
   function renderLeaderboard() {
     return (
-      <section id="tabla" style={secondarySectionStyle}>
+      <section
+        id="tabla"
+        style={{ ...secondarySectionStyle, marginBottom: 0 }}
+      >
         <h2 style={{ marginTop: 0, textAlign: 'center' }}>🏅 Tabla General</h2>
 
         <p
@@ -1834,8 +1837,8 @@ export default function Home() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gap: '12px'
+              gridTemplateColumns: '1fr',
+              gap: '9px'
             }}
           >
             {leaderboard.map((entry, index) => {
@@ -1899,7 +1902,10 @@ export default function Home() {
     )
 
     return (
-      <section id="por-ronda" style={secondarySectionStyle}>
+      <section
+        id="por-ronda"
+        style={{ ...secondarySectionStyle, marginBottom: 0 }}
+      >
         <h2 style={{ marginTop: 0, textAlign: 'center' }}>
           🗂️ Tabla por Ronda
         </h2>
@@ -1951,8 +1957,8 @@ export default function Home() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gap: '12px'
+              gridTemplateColumns: '1fr',
+              gap: '9px'
             }}
           >
             {entries.map((entry, index) => {
@@ -2263,8 +2269,20 @@ export default function Home() {
         {renderNavBar()}
         {renderProfileSummary()}
         {renderKnockoutBracket()}
-        {renderLeaderboard()}
-        {renderRoundLeaderboard()}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+            gap: '25px',
+            alignItems: 'start',
+            marginBottom: '25px'
+          }}
+        >
+          {renderLeaderboard()}
+          {renderRoundLeaderboard()}
+        </div>
+
         {renderChampionBadges()}
         {renderAdminCurrentMatchPredictions()}
         {renderMovement()}
